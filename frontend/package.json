@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev --port 3000",
-    "build": "next build && mkdir -p .next/standalone/node_modules/@swc && cp -R node_modules/@swc/helpers .next/standalone/node_modules/@swc/",
+    "build": "next build && mkdir -p .next/standalone/node_modules/@swc && rm -rf .next/standalone/node_modules/@swc/helpers && cp -R node_modules/@swc/helpers .next/standalone/node_modules/@swc/",
     "start": "node .next/standalone/server.js",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"
