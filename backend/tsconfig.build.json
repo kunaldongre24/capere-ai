@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    // Incremental builds are disabled here deliberately. With `incremental`
+    // inherited from the base config, a stale tsconfig.build.tsbuildinfo makes
+    // tsc believe the output is current and emit NOTHING while still exiting 0
+    // — a silent no-op build that is genuinely hard to diagnose.
+    "incremental": false
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test",
+    "**/*.spec.ts",
+    "vitest.config.ts",
+    "vitest.e2e.config.ts"
+  ]
+}

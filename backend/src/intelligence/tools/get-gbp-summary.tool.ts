@@ -1,0 +1,133 @@
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { z } from 'zod';
+import { DatabaseService } from '../../shared/database';
+import type { Tool, ToolContext } from './tool.interface';
+import { ToolRegistry } from './tool-registry';
+const inputSchema = z.object({
+  days: z.number().int().min(1).max(90).default(7),
+  integrationId: z.string().uuid().optional(),
+});
+type Input = { days?: number; integrationId?: string };
+export interface GbpSummary {
+  readonly connected: boolean;
+  readonly dataAvailable: boolean;
+  readonly integrationId?: string;
+  readonly resourceId?: string;
+  readonly period?: { start: string; end: string; days: number };
+  readonly metrics?: Record<string, number>;
+  readonly reviews?: { count: number; averageRating: number; unanswered: number };
+  readonly message?: string;
+}
+@Injectable()
+export class GetGbpSummaryTool implements Tool<Input, GbpSummary>, OnModuleInit {
+  readonly name = 'get_gbp_summary';
+  readonly description =
+    'Returns Google Business Profile interactions such as map impressions, website clicks, calls, direction requests, and review health.';
+  readonly schema = inputSchema;
+  readonly permissions = [
+    'owner',
+    'office_manager',
+    'marketing_manager',
+    'seo_specialist',
+    'capere_admin',
+  ] as const;
+  readonly agents = ['general', 'seo', 'analytics', 'cmo', 'content'] as const;
+  readonly timeoutMs = 10_000;
+  readonly mutates = false;
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly registry: ToolRegistry,
+  ) {}
+  onModuleInit(): void {
+    this.registry.register(this);
+  }
+  async execute(input: Input, context: ToolContext): Promise<GbpSummary> {
+    const days = input.days ?? 7;
+    let integrationQuery = this.database.db
+      .selectFrom('capere.integrations')
+      .select(['id', 'account_id'])
+      .where('organization_id', '=', context.organizationId)
+      .where('provider', '=', 'google_business_profile')
+      .where('status', '=', 'connected')
+      .where('sync_enabled', '=', true);
+    if (input.integrationId)
+      integrationQuery = integrationQuery.where('id', '=', input.integrationId);
+    const integration = await integrationQuery.orderBy('last_sync_at', 'desc').executeTakeFirst();
+    if (!integration)
+      return {
+        connected: false,
+        dataAvailable: false,
+        message: 'Google Business Profile is not connected for this organization.',
+      };
+    const latest = await this.database.db
+      .selectFrom('capere.analytics_daily')
+      .select('metric_date')
+      .where('organization_id', '=', context.organizationId)
+      .where('integration_id', '=', integration.id)
+      .where('provider', '=', 'google_business_profile')
+      .orderBy('metric_date', 'desc')
+      .executeTakeFirst();
+    const reviews = await this.database.db
+      .selectFrom('capere.gbp_reviews')
+      .select(['rating', 'reply'])
+      .where('organization_id', '=', context.organizationId)
+      .where('integration_id', '=', integration.id)
+      .execute();
+    if (!latest)
+      return {
+        connected: true,
+        dataAvailable: reviews.length > 0,
+        reviews: {
+          count: reviews.length,
+          averageRating: reviews.length
+            ? reviews.reduce((n, r) => n + r.rating, 0) / reviews.length
+            : 0,
+          unanswered: reviews.filter((r) => !r.reply).length,
+        },
+        message: reviews.length
+          ? undefined
+          : 'Google Business Profile is connected but has not synced performance metrics yet.',
+      };
+    const end = this.date(latest.metric_date);
+    const start = this.shift(end, -(days - 1));
+    const rows = await this.database.db
+      .selectFrom('capere.analytics_daily')
+      .select(['metrics'])
+      .where('organization_id', '=', context.organizationId)
+      .where('integration_id', '=', integration.id)
+      .where('provider', '=', 'google_business_profile')
+      .where('metric_date', '>=', start)
+      .where('metric_date', '<=', end)
+      .execute();
+    const metrics: Record<string, number> = {};
+    for (const row of rows)
+      for (const [key, value] of Object.entries(this.object(row.metrics)))
+        metrics[key] = (metrics[key] ?? 0) + Number(value ?? 0);
+    return {
+      connected: true,
+      dataAvailable: true,
+      integrationId: integration.id,
+      resourceId: integration.account_id ?? undefined,
+      period: { start, end, days },
+      metrics,
+      reviews: {
+        count: reviews.length,
+        averageRating: reviews.length
+          ? reviews.reduce((n, r) => n + r.rating, 0) / reviews.length
+          : 0,
+        unanswered: reviews.filter((r) => !r.reply).length,
+      },
+    };
+  }
+  private object(v: unknown): Record<string, number> {
+    return v && typeof v === 'object' ? (v as Record<string, number>) : {};
+  }
+  private date(v: unknown): string {
+    return v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10);
+  }
+  private shift(value: string, days: number): string {
+    const d = new Date(`${value}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+}

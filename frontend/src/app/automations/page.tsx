@@ -1,0 +1,1 @@
+import { Page, EmptyState } from '@/components/page'; export default function Automations(){return <Page eyebrow="Automations" title="Execute with control" subtitle="Approved workflows create tasks and trigger integrations without hidden side effects."><EmptyState title="No workflows queued" body="Automation runs will appear here after recommendations are approved."/></Page>}

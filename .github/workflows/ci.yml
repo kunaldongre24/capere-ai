@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.11.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @capere/backend typecheck
+      - run: pnpm --filter @capere/backend lint
+      - run: pnpm --filter @capere/backend build
+      - name: Unit, integration and RLS tests
+        if: ${{ secrets.TEST_DATABASE_URL != '' && secrets.SUPABASE_URL != '' }}
+        env:
+          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+          ENCRYPTION_KEYS: ${{ secrets.ENCRYPTION_KEYS }}
+          API_KEY_HASHING_SALT: ${{ secrets.API_KEY_HASHING_SALT }}
+        run: pnpm --filter @capere/backend test
+      - name: HTTP e2e tests
+        if: ${{ secrets.TEST_DATABASE_URL != '' && secrets.SUPABASE_URL != '' }}
+        env:
+          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+          ENCRYPTION_KEYS: ${{ secrets.ENCRYPTION_KEYS }}
+          API_KEY_HASHING_SALT: ${{ secrets.API_KEY_HASHING_SALT }}
+        run: pnpm --filter @capere/backend test:e2e

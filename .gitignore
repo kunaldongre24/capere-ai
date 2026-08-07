@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+frontend/.next/
+frontend/.next-dev/
+*.tsbuildinfo
+
+# Environment — never commit real secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.claude/settings.local.json
+*.swp
+.DS_Store
+
+# Docker volumes
+.docker-data/
+
+# Generated database types (regenerated from live schema via kysely-codegen)
+backend/src/shared/database/generated/

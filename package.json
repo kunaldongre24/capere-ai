@@ -1,0 +1,36 @@
+{
+  "name": "capere-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Capere AI — AI Growth Operating System for CPA firms",
+  "engines": {
+    "node": ">=20.11.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @capere/backend --filter @capere/frontend dev",
+    "dev:backend": "pnpm --filter @capere/backend dev",
+    "dev:frontend": "pnpm --filter @capere/frontend dev",
+    "build": "pnpm -r build",
+    "start": "pnpm --filter @capere/backend start",
+    "worker": "pnpm --filter @capere/backend worker",
+    "start:worker": "pnpm --filter @capere/backend start:worker",
+    "test": "pnpm --filter @capere/backend test",
+    "test:watch": "pnpm --filter @capere/backend test:watch",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"**/*.{ts,js,json,md,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,js,json,md,yaml,yml}\"",
+    "typecheck": "pnpm -r typecheck",
+    "migrate": "pnpm --filter @capere/backend migrate",
+    "migrate:down": "pnpm --filter @capere/backend migrate:down",
+    "api-key:issue": "pnpm --filter @capere/backend api-key:issue",
+    "db:types": "pnpm --filter @capere/backend db:types",
+    "infra:up": "docker compose up -d redis qdrant",
+    "infra:down": "docker compose down",
+    "infra:reset": "docker compose down -v && docker compose up -d redis qdrant"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
+  }
+}

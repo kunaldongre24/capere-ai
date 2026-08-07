@@ -1,0 +1,81 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - capere-redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    profiles: ['qdrant']
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:6333:6333'
+      - '127.0.0.1:6334:6334'
+    volumes:
+      - capere-qdrantdata:/qdrant/storage
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          "bash -c 'exec 3<>/dev/tcp/localhost/6333 && echo -e \"GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n\" >&3 && cat <&3 | grep -q \"status.*ok\"'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  open-webui:
+    image: ${OPEN_WEBUI_IMAGE:?Set OPEN_WEBUI_IMAGE to an immutable Open WebUI version or digest}
+    restart: unless-stopped
+    environment:
+      # Talk to Capere's OpenAI-compatible endpoint, not OpenAI
+      OPENAI_API_BASE_URL: http://capere-backend:3000/v1
+      # Provision with `pnpm api-key:issue <organization-id>` and set in .env.
+      OPENAI_API_KEY: ${OPEN_WEBUI_API_KEY:?Set OPEN_WEBUI_API_KEY to a provisioned Capere API key}
+      # This Compose service is intentionally single-tenant: the key above is
+      # bound to exactly one Capere organization. Deploy one isolated Open WebUI
+      # instance per organization until a verified user-identity bridge exists.
+    ports:
+      - '8080:8080'
+    volumes:
+      - capere-owuidata:/app/backend/data
+
+  # The Capere backend itself, built from the local Dockerfile.
+  # Comment out to run `pnpm dev` on the host instead.
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - '3000:3000'
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    command: ['node', 'backend/dist/worker.js']
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+
+volumes:
+  capere-redisdata:
+  capere-qdrantdata:
+  capere-owuidata:

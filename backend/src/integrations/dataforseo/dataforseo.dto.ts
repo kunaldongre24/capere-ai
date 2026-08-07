@@ -1,0 +1,12 @@
+import { IsInt, IsString, IsUrl, Length, Max, Min } from 'class-validator';
+
+export class CreateSeoProjectDto {
+  @IsString() @Length(1, 200) name!: string;
+  @IsUrl({ require_protocol: true }) siteUrl!: string;
+  @IsInt() @Min(1) targetLocationCode!: number;
+  @IsString() @Length(2, 10) languageCode = 'en';
+}
+
+export class RunSeoAuditDto {
+  @IsInt() @Min(1) @Max(100000) maxCrawlPages = 1000;
+}

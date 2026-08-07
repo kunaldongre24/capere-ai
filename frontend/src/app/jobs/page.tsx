@@ -1,0 +1,1 @@
+import { Page, EmptyState } from '@/components/page'; export default function Jobs(){return <Page eyebrow="Operations" title="Background jobs" subtitle="Observe syncs, audits, embeddings, and report generation with retry visibility."><EmptyState title="No recent jobs" body="Scheduled workers will populate this view as integrations are synced."/></Page>}

@@ -1,0 +1,2 @@
+import { Page, EmptyState } from '@/components/page';
+export default function RecommendationsPage(){return <Page eyebrow="Recommendations" title="Turn signals into approved action" subtitle="Every recommendation is reviewable, auditable, and approval-first."><EmptyState title="No recommendations yet" body="Recommendations are generated from synchronized SEO, GBP, analytics, and GHL data."/></Page>}
