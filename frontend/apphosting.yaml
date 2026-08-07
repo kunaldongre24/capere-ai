@@ -5,6 +5,9 @@ runConfig:
   cpu: 1
   memoryMiB: 512
 env:
+  - variable: HOSTNAME
+    value: 0.0.0.0
+    availability: [RUNTIME]
   - variable: CAPERE_API_URL
     value: https://api.capereai.com
     availability: [BUILD, RUNTIME]
