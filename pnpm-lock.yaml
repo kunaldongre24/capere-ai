@@ -138,24 +138,39 @@ importers:
 
   frontend:
     dependencies:
+      '@next/env':
+        specifier: 15.5.23
+        version: 15.5.23
       '@supabase/ssr':
         specifier: ^0.6.1
         version: 0.6.1(@supabase/supabase-js@2.112.2)
       '@supabase/supabase-js':
         specifier: ^2.49.1
         version: 2.112.2
+      '@swc/helpers':
+        specifier: 0.5.15
+        version: 0.5.15
+      caniuse-lite:
+        specifier: 1.0.30001806
+        version: 1.0.30001806
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@19.2.8)
       next:
         specifier: 15.5.23
         version: 15.5.23(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      postcss:
+        specifier: 8.4.31
+        version: 8.4.31
       react:
         specifier: ^19.0.0
         version: 19.2.8
       react-dom:
         specifier: ^19.0.0
         version: 19.2.8(react@19.2.8)
+      styled-jsx:
+        specifier: 5.1.6
+        version: 5.1.6(react@19.2.8)
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
