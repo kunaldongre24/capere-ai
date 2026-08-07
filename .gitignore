@@ -31,6 +31,7 @@ coverage/
 .idea/
 .claude/settings.local.json
 *.swp
+*.swo
 .DS_Store
 
 # Docker volumes
