@@ -286,7 +286,7 @@ export class SchedulerService {
       // A scheduled run must receive a fresh BullMQ id. Reusing a daily id
       // collides with retained completed jobs and silently suppresses later
       // runs on the same day.
-      const jobId = `google-sync:${organizationId}:${integrationId}:${Date.now()}`;
+      const jobId = `google-sync-${organizationId}-${integrationId}-${Date.now()}`;
       if (!this.queues) throw new Error('Queue registry is unavailable');
       const job = await this.queues.get('integration-sync').add(
         'google-sync',
@@ -315,7 +315,7 @@ export class SchedulerService {
         },
         // Polls are recurring until the provider reports completion; each poll
         // therefore needs a distinct id while the task remains in flight.
-        { jobId: `dataforseo-audit-poll:${taskId}:${Date.now()}` },
+        { jobId: `dataforseo-audit-poll-${taskId}-${Date.now()}` },
       );
       return { queuedJobId: job.id };
     }
@@ -331,7 +331,7 @@ export class SchedulerService {
         .add(
           'github-change-execute',
           { kind: 'github-change-execute', organizationId, requestId },
-          { jobId: `github-change-execute:${requestId}:${Date.now()}` },
+          { jobId: `github-change-execute-${requestId}-${Date.now()}` },
         );
       return { queuedJobId: job.id };
     }
