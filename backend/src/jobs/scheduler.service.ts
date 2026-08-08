@@ -319,6 +319,26 @@ export class SchedulerService {
       );
       return { queuedJobId: job.id };
     }
+    if (jobType === 'dataforseo-audit-submit') {
+      if (!organizationId) throw new Error('dataforseo-audit-submit requires an organization');
+      const value = this.objectPayload(payload);
+      const projectId = value['projectId'];
+      const maxCrawlPages = value['maxCrawlPages'];
+      if (typeof projectId !== 'string')
+        throw new Error('dataforseo-audit-submit requires payload.projectId');
+      if (!this.queues) throw new Error('Queue registry is unavailable');
+      const job = await this.queues.get('integration-sync').add(
+        'dataforseo-audit-submit',
+        {
+          kind: 'dataforseo-audit-submit',
+          organizationId,
+          projectId,
+          maxCrawlPages: typeof maxCrawlPages === 'number' ? Math.min(maxCrawlPages, 20) : 20,
+        },
+        { jobId: `dataforseo-audit-submit-${organizationId}-${projectId}-${Date.now()}` },
+      );
+      return { queuedJobId: job.id };
+    }
     if (jobType === 'github-change-execute') {
       if (!organizationId) throw new Error('github-change-execute requires an organization');
       const value = this.objectPayload(payload);

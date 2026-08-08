@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { APP_CONFIG, type AppConfig } from '../../shared/config';
 import { sql } from 'kysely';
 import { DatabaseService } from '../../shared/database';
 import { EventType, OutboxService } from '../../shared/events';
@@ -10,6 +11,7 @@ import type { CreateSeoProjectDto, RunSeoAuditDto } from './dataforseo.dto';
 @Injectable()
 export class DataForSeoService {
   constructor(
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly database: DatabaseService,
     private readonly adapter: DataForSeoAdapter,
     private readonly outbox: OutboxService,
@@ -47,13 +49,28 @@ export class DataForSeoService {
   }
 
   async createProject(organizationId: string, dto: CreateSeoProjectDto) {
+    const url = new URL(dto.siteUrl);
+    const host = url.hostname.toLowerCase().replace(/\.$/, '');
+    const sharedHosts = ['vercel.app', 'netlify.app', 'pages.dev', 'github.io'];
+    if (sharedHosts.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))) {
+      throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'Please use a verified custom domain');
+    }
+    try {
+      let response = await fetch(url, { method: 'HEAD', redirect: 'follow', signal: AbortSignal.timeout(5000) });
+      if (response.status === 405) {
+        response = await fetch(url, { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(5000), headers: { range: 'bytes=0-1023' } });
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'Website is not reachable; verify the URL and try again');
+    }
     await this.ensurePlatformIntegration(organizationId);
-    return this.database.db
+    const project = await this.database.db
       .insertInto('capere.seo_projects')
       .values({
         organization_id: organizationId,
         name: dto.name,
-        site_url: dto.siteUrl,
+        site_url: url.toString().replace(/\/$/, ''),
         target_location_code: dto.targetLocationCode,
         language_code: dto.languageCode,
         enabled: true,
@@ -68,6 +85,24 @@ export class DataForSeoService {
       )
       .returningAll()
       .executeTakeFirstOrThrow();
+    await this.database.db
+      .insertInto('capere.scheduled_jobs')
+      .values({
+        organization_id: organizationId,
+        job_type: 'dataforseo-audit-submit',
+        name: `dataforseo-audit:${project.id}`,
+        schedule: 'weekly',
+        enabled: true,
+        next_run_at: new Date(),
+        payload: JSON.stringify({ projectId: project.id, maxCrawlPages: 20 }),
+      })
+      .onConflict((c) => c.columns(['organization_id', 'name']).doUpdateSet({
+        enabled: true,
+        next_run_at: new Date(),
+        payload: JSON.stringify({ projectId: project.id, maxCrawlPages: 20 }),
+      }))
+      .execute();
+    return project;
   }
 
   async submitAudit(organizationId: string, projectId: string, dto: RunSeoAuditDto) {
@@ -81,7 +116,9 @@ export class DataForSeoService {
     const integration = await this.ensurePlatformIntegration(organizationId);
     const request = {
       target: new URL(project.site_url).hostname,
-      max_crawl_pages: dto.maxCrawlPages,
+      max_crawl_pages: Math.min(dto.maxCrawlPages || 20, 20),
+      enable_javascript: false,
+      pingback_url: this.config.dataForSeo.pingbackUrl || undefined,
       tag: `capere:${organizationId}:${project.id}`,
     };
     const fingerprint = createHash('sha256').update(JSON.stringify(request)).digest('hex');
@@ -223,6 +260,15 @@ export class DataForSeoService {
       });
     });
     return { ready: true, auditId: audit.id, score, issueCount };
+  }
+
+  async handleWebhook(body: unknown) {
+    const payload = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+    const task = payload['id'] ?? payload['task_id'];
+    if (typeof task !== 'string') return { accepted: true };
+    const row = await this.database.db.selectFrom('capere.provider_tasks').select(['organization_id', 'id']).where('provider', '=', 'data_for_seo').where('provider_task_id', '=', task).executeTakeFirst();
+    if (!row) return { accepted: true };
+    return this.pollAudit(row.organization_id, row.id);
   }
 
   private score(result: Record<string, unknown>): number {

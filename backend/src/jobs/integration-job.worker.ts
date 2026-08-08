@@ -15,6 +15,7 @@ type IntegrationJob =
       to?: string;
     }
   | { kind: 'dataforseo-audit-poll'; organizationId: string; taskId: string }
+  | { kind: 'dataforseo-audit-submit'; organizationId: string; projectId: string; maxCrawlPages: number }
   | { kind: 'github-change-execute'; organizationId: string; requestId: string };
 
 @Injectable()
@@ -59,6 +60,10 @@ export class IntegrationJobWorker {
       );
     if (job.data.kind === 'dataforseo-audit-poll')
       return this.dataForSeo.pollAudit(job.data.organizationId, job.data.taskId);
+    if (job.data.kind === 'dataforseo-audit-submit')
+      return this.dataForSeo.submitAudit(job.data.organizationId, job.data.projectId, {
+        maxCrawlPages: Math.min(job.data.maxCrawlPages, 20),
+      });
     return this.github.executeApproved(job.data.organizationId, job.data.requestId);
   }
 }

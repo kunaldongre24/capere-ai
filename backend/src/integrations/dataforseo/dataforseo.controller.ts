@@ -1,6 +1,6 @@
-import { Body, Controller, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { CurrentOrg, Roles } from '../../auth';
+import { CurrentOrg, Public, Roles } from '../../auth';
 import { CreateSeoProjectDto, RunSeoAuditDto } from './dataforseo.dto';
 import { DataForSeoService } from './dataforseo.service';
 
@@ -27,5 +27,11 @@ export class DataForSeoController {
   @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
   poll(@CurrentOrg() org: string, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.pollAudit(org, id);
+  }
+
+  @Post('webhook')
+  @Public()
+  webhook(@Req() req: { body: unknown }) {
+    return this.service.handleWebhook(req.body);
   }
 }

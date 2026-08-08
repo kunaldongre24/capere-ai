@@ -99,6 +99,7 @@ export const envSchema = z
     DATAFORSEO_LOGIN: z.string().optional().default(''),
     DATAFORSEO_PASSWORD: z.string().optional().default(''),
     DATAFORSEO_BASE_URL: z.string().url().default('https://api.dataforseo.com/v3'),
+    DATAFORSEO_PINGBACK_URL: z.string().url().optional().or(z.literal('')).default(''),
     GITHUB_APP_ID: z.string().optional().default(''),
     GITHUB_PRIVATE_KEY_BASE64: z.string().optional().default(''),
     GITHUB_WEBHOOK_SECRET: z.string().optional().default(''),

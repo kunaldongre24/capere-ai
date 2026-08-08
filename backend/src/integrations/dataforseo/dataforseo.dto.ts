@@ -8,5 +8,5 @@ export class CreateSeoProjectDto {
 }
 
 export class RunSeoAuditDto {
-  @IsInt() @Min(1) @Max(100000) maxCrawlPages = 1000;
+  @IsInt() @Min(1) @Max(20) maxCrawlPages = 20;
 }

@@ -66,6 +66,7 @@ export interface AppConfig {
     readonly login: string;
     readonly password: string;
     readonly baseUrl: string;
+    readonly pingbackUrl: string;
   };
   readonly github: {
     readonly appId: string;
@@ -289,6 +290,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       login: env.DATAFORSEO_LOGIN,
       password: env.DATAFORSEO_PASSWORD,
       baseUrl: env.DATAFORSEO_BASE_URL,
+      pingbackUrl: env.DATAFORSEO_PINGBACK_URL,
     }),
     github: Object.freeze({
       appId: env.GITHUB_APP_ID,
