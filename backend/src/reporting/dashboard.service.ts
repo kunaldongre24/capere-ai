@@ -226,9 +226,12 @@ export class DashboardService {
   }
 
   async seoCommandCenter(organizationId: string) {
-    const [metrics, recommendations] = await Promise.all([
-      this.query(organizationId, 'seo', 30),
-      this.database.db
+    let metrics = await this.query(organizationId, 'seo', 30);
+    if (metrics.length === 0) {
+      await this.refresh(organizationId);
+      metrics = await this.query(organizationId, 'seo', 30);
+    }
+    const recommendations = await this.database.db
         .selectFrom('capere.recommendations')
         .selectAll()
         .where('organization_id', '=', organizationId)
@@ -236,8 +239,7 @@ export class DashboardService {
         .where('status', 'in', ['proposed', 'approved', 'in_progress'])
         .orderBy('created_at', 'desc')
         .limit(25)
-        .execute(),
-    ]);
+        .execute();
     return {
       generatedAt: new Date().toISOString(),
       metrics,
