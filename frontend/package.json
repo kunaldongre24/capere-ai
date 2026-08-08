@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev --port 3000",
-    "build": "next build && mkdir -p .next/standalone/node_modules .next/standalone/node_modules/@next .next/standalone/node_modules/@swc && rm -rf .next/standalone/node_modules/next .next/standalone/node_modules/@next/env .next/standalone/node_modules/styled-jsx .next/standalone/node_modules/@swc/helpers .next/standalone/node_modules/react .next/standalone/node_modules/react-dom && cp -RL node_modules/next .next/standalone/node_modules/ && cp -RL node_modules/@next/env .next/standalone/node_modules/@next/ && cp -RL node_modules/styled-jsx .next/standalone/node_modules/ && cp -RL node_modules/@swc/helpers .next/standalone/node_modules/@swc/ && cp -RL node_modules/react node_modules/react-dom .next/standalone/node_modules/",
+    "build": "next build && mkdir -p .next/standalone/node_modules/@swc && rm -rf .next/standalone/node_modules/@swc/helpers && cp -RL node_modules/@swc/helpers .next/standalone/node_modules/@swc/",
     "start": "node .next/standalone/server.js",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"
