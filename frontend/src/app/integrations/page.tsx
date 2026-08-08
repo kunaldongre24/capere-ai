@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 
 const providers = [
@@ -12,9 +12,17 @@ const providers = [
   ['GitHub', 'Repository analysis and approved changes'],
 ] as const;
 
-function GoogleConnectButton() {
+function GoogleConnectButton({ provider }: { provider: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/capere/integrations').then((r) => r.ok ? r.json() : null).then((body) => {
+      setConnected((body?.data ?? []).some((item: { provider?: string; status?: string }) =>
+        item.status === 'connected' && item.provider === provider));
+    }).catch(() => undefined);
+  }, [provider]);
 
   async function connect() {
     setLoading(true);
@@ -33,13 +41,13 @@ function GoogleConnectButton() {
   }
 
   return <>
-    <button className="btn" type="button" onClick={connect} disabled={loading}>
+    {connected ? <span className="badge">Connected</span> : <button className="btn" type="button" onClick={connect} disabled={loading}>
       {loading ? 'Connecting…' : 'Connect Google'}
-    </button>
+    </button>}
     {error && <p className="error-text" role="alert">{error}</p>}
   </>;
 }
 
 export default function IntegrationsPage() {
-  return <Page eyebrow="Integrations" title="Connect your growth data" subtitle="Capere reads intelligence from your existing systems; GoHighLevel remains your CRM."><div className="grid grid-3">{providers.map(([name, desc]) => <div className="card" key={name}><h2 className="card-title">{name}</h2><p className="muted" style={{ minHeight: 45 }}>{desc}</p>{name === 'Google Analytics 4' || name === 'Search Console' || name === 'Google Business Profile' ? <GoogleConnectButton /> : <span className="badge">Connection status available in API</span>}</div>)}</div></Page>;
+  return <Page eyebrow="Integrations" title="Connect your growth data" subtitle="Capere reads intelligence from your existing systems; GoHighLevel remains your CRM."><div className="grid grid-3">{providers.map(([name, desc]) => <div className="card" key={name}><h2 className="card-title">{name}</h2><p className="muted" style={{ minHeight: 45 }}>{desc}</p>{name === 'Google Analytics 4' ? <GoogleConnectButton provider="google_analytics_4" /> : name === 'Search Console' ? <GoogleConnectButton provider="google_search_console" /> : name === 'Google Business Profile' ? <GoogleConnectButton provider="google_business_profile" /> : <span className="badge">Connection status available in API</span>}</div>)}</div></Page>;
 }
