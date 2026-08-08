@@ -231,7 +231,8 @@ export class DashboardService {
       await this.refresh(organizationId);
       metrics = await this.query(organizationId, 'seo', 30);
     }
-    const recommendations = await this.database.db
+    const [recommendations, technicalAudit] = await Promise.all([
+      this.database.db
         .selectFrom('capere.recommendations')
         .selectAll()
         .where('organization_id', '=', organizationId)
@@ -239,12 +240,36 @@ export class DashboardService {
         .where('status', 'in', ['proposed', 'approved', 'in_progress'])
         .orderBy('created_at', 'desc')
         .limit(25)
-        .execute();
+        .execute(),
+      this.database.db
+        .selectFrom('capere.technical_audits as a')
+        .innerJoin('capere.seo_projects as p', (join) =>
+          join
+            .onRef('p.organization_id', '=', 'a.organization_id')
+            .onRef('p.id', '=', 'a.seo_project_id'),
+        )
+        .select([
+          'a.id',
+          'a.status',
+          'a.score',
+          'a.issue_count',
+          'a.summary',
+          'a.started_at',
+          'a.completed_at',
+          'p.site_url',
+        ])
+        .where('a.organization_id', '=', organizationId)
+        .where('a.status', '=', 'succeeded')
+        .orderBy('a.completed_at', 'desc')
+        .limit(1)
+        .executeTakeFirst(),
+    ]);
     return {
       generatedAt: new Date().toISOString(),
       metrics,
       recommendations,
-      evidenceComplete: metrics.length > 0,
+      technicalAudit: technicalAudit ?? null,
+      evidenceComplete: metrics.length > 0 || Boolean(technicalAudit),
     };
   }
 
