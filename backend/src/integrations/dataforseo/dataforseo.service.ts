@@ -15,7 +15,7 @@ export class DataForSeoService {
     private readonly outbox: OutboxService,
   ) {}
 
-  async connect(organizationId: string) {
+  private async ensurePlatformIntegration(organizationId: string) {
     return this.database.db
       .insertInto('capere.integrations')
       .values({
@@ -46,7 +46,8 @@ export class DataForSeoService {
       .executeTakeFirstOrThrow();
   }
 
-  createProject(organizationId: string, dto: CreateSeoProjectDto) {
+  async createProject(organizationId: string, dto: CreateSeoProjectDto) {
+    await this.ensurePlatformIntegration(organizationId);
     return this.database.db
       .insertInto('capere.seo_projects')
       .values({
@@ -77,18 +78,7 @@ export class DataForSeoService {
       .where('id', '=', projectId)
       .executeTakeFirst();
     if (!project) throw AppException.notFound(ErrorCode.NOT_FOUND, 'SEO project not found');
-    const integration = await this.database.db
-      .selectFrom('capere.integrations')
-      .select('id')
-      .where('organization_id', '=', organizationId)
-      .where('provider', '=', 'data_for_seo')
-      .where('status', '=', 'connected')
-      .executeTakeFirst();
-    if (!integration)
-      throw AppException.badRequest(
-        ErrorCode.INTEGRATION_NOT_CONNECTED,
-        'DataForSEO is not connected',
-      );
+    const integration = await this.ensurePlatformIntegration(organizationId);
     const request = {
       target: new URL(project.site_url).hostname,
       max_crawl_pages: dto.maxCrawlPages,

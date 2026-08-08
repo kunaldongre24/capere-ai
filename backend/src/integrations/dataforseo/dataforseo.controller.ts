@@ -9,11 +9,6 @@ import { DataForSeoService } from './dataforseo.service';
 @Controller({ path: 'integrations/data-for-seo', version: '1' })
 export class DataForSeoController {
   constructor(private readonly service: DataForSeoService) {}
-  @Post('connect') @Roles('owner', 'office_manager', 'capere_admin') connect(
-    @CurrentOrg() org: string,
-  ) {
-    return this.service.connect(org);
-  }
   @Post('projects')
   @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
   project(@CurrentOrg() org: string, @Body() dto: CreateSeoProjectDto) {
