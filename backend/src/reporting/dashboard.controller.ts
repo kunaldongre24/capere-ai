@@ -34,6 +34,12 @@ export class DashboardController {
     return this.dashboards.cmoBrief(organizationId);
   }
 
+  @Get('ai-cmo/summary')
+  @Roles('owner', 'office_manager', 'marketing_manager', 'capere_admin')
+  cmoSummary(@CurrentOrg() organizationId: string) {
+    return this.dashboards.cmoSummary(organizationId);
+  }
+
   @Get('seo-command-center/summary')
   @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
   seoSummary(@CurrentOrg() organizationId: string) {

@@ -225,6 +225,22 @@ export class DashboardService {
     };
   }
 
+  async cmoSummary(organizationId: string) {
+    let metrics = await this.query(organizationId, 'executive', 30);
+    if (metrics.length === 0) {
+      await this.refresh(organizationId);
+      metrics = await this.query(organizationId, 'executive', 30);
+    }
+    const [insights, recommendations, briefs, tasks, integrations] = await Promise.all([
+      this.database.db.selectFrom('capere.insights').select(['id','category','severity','title','body','confidence','created_at']).where('organization_id','=',organizationId).where('status','=','active').orderBy('created_at','desc').limit(30).execute(),
+      this.database.db.selectFrom('capere.recommendations').selectAll().where('organization_id','=',organizationId).where('status','in',['proposed','approved','in_progress']).orderBy('created_at','desc').limit(30).execute(),
+      this.database.db.selectFrom('capere.generated_artifacts').select(['id','artifact_date','title','content','status','created_at']).where('organization_id','=',organizationId).where('kind','=','daily_brief').orderBy('artifact_date','desc').limit(10).execute(),
+      this.database.db.selectFrom('capere.automation_actions').select(['id','kind','status','title','error','approved_at','executed_at','created_at']).where('organization_id','=',organizationId).orderBy('created_at','desc').limit(30).execute(),
+      this.database.db.selectFrom('capere.integrations').select(['provider','status','last_sync_at','last_error']).where('organization_id','=',organizationId).execute(),
+    ]);
+    return { generatedAt:new Date().toISOString(), metrics, insights, recommendations, briefs, tasks, integrations, evidenceComplete:metrics.length>0||insights.length>0||recommendations.length>0 };
+  }
+
   async seoCommandCenter(organizationId: string) {
     let metrics = await this.query(organizationId, 'seo', 30);
     if (metrics.length === 0) {
