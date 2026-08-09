@@ -231,7 +231,8 @@ export class DashboardService {
       await this.refresh(organizationId);
       metrics = await this.query(organizationId, 'seo', 30);
     }
-    const [recommendationsResult, technicalAuditResult, auditHistoryResult, projectResult, keywordsResult, competitorsResult, integrationsResult] = await Promise.allSettled([
+    const queryStart = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10);
+    const [recommendationsResult, technicalAuditResult, auditHistoryResult, projectResult, keywordsResult, searchQueryRowsResult, competitorsResult, integrationsResult] = await Promise.allSettled([
       this.database.db
         .selectFrom('capere.recommendations')
         .selectAll()
@@ -266,6 +267,14 @@ export class DashboardService {
       this.database.db.selectFrom('capere.technical_audits').select(['id','status','score','issue_count','started_at','completed_at']).where('organization_id','=',organizationId).orderBy('created_at','desc').limit(10).execute(),
       this.database.db.selectFrom('capere.seo_projects').select(['id','name','site_url','enabled','target_location_code','language_code']).where('organization_id','=',organizationId).where('enabled','=',true).orderBy('created_at','desc').limit(1).executeTakeFirst(),
       this.database.db.selectFrom('capere.keywords as k').leftJoin('capere.keyword_rankings as r','r.keyword_id','k.id').select(['k.keyword','k.tags','r.rank','r.checked_on','r.url']).where('k.organization_id','=',organizationId).where('k.enabled','=',true).orderBy('r.checked_on','desc').limit(50).execute(),
+      this.database.db
+        .selectFrom('capere.analytics_daily')
+        .select(['metric_date', 'dimensions', 'metrics'])
+        .where('organization_id', '=', organizationId)
+        .where('provider', '=', 'google_search_console')
+        .where('metric_date', '>=', queryStart)
+        .orderBy('metric_date', 'desc')
+        .execute(),
       this.database.db.selectFrom('capere.competitors').select(['domain','name','metrics','last_checked_at']).where('organization_id','=',organizationId).orderBy('last_checked_at','desc').limit(25).execute(),
       this.database.db.selectFrom('capere.integrations').select(['provider','status','last_sync_at','last_error']).where('organization_id','=',organizationId).execute(),
     ]);
@@ -275,6 +284,35 @@ export class DashboardService {
     const auditHistory = value(auditHistoryResult, []);
     const project = value(projectResult, undefined);
     const keywords = value(keywordsResult, []);
+    const searchQueryRows = value(searchQueryRowsResult, []);
+    const searchQueryMap = new Map<string, { query: string; clicks: number; impressions: number; weightedPosition: number; latestDate: string }>();
+    for (const row of searchQueryRows) {
+      const dimensions = this.object(row.dimensions);
+      const query = typeof dimensions.query === 'string' ? dimensions.query.trim() : '';
+      if (!query) continue;
+      const rowMetrics = this.object(row.metrics);
+      const clicks = Number(rowMetrics.clicks ?? 0);
+      const impressions = Number(rowMetrics.impressions ?? 0);
+      const position = Number(rowMetrics.position ?? 0);
+      const metricDate = this.dateString(row.metric_date);
+      const current = searchQueryMap.get(query) ?? { query, clicks: 0, impressions: 0, weightedPosition: 0, latestDate: metricDate };
+      current.clicks += Number.isFinite(clicks) ? clicks : 0;
+      current.impressions += Number.isFinite(impressions) ? impressions : 0;
+      if (Number.isFinite(position)) current.weightedPosition += position * Math.max(impressions, 1);
+      if (metricDate > current.latestDate) current.latestDate = metricDate;
+      searchQueryMap.set(query, current);
+    }
+    const searchQueries = [...searchQueryMap.values()]
+      .map((row) => ({
+        query: row.query,
+        clicks: row.clicks,
+        impressions: row.impressions,
+        ctr: row.impressions > 0 ? row.clicks / row.impressions : 0,
+        position: row.weightedPosition / Math.max(row.impressions, 1),
+        latestDate: row.latestDate,
+      }))
+      .sort((a, b) => b.impressions - a.impressions || b.clicks - a.clicks)
+      .slice(0, 25);
     const competitors = value(competitorsResult, []);
     const integrations = value(integrationsResult, []);
     return {
@@ -287,6 +325,7 @@ export class DashboardService {
       auditHistory,
       project: project ?? null,
       keywords,
+      searchQueries,
       competitors,
       integrations,
       evidenceComplete: metrics.length > 0 || Boolean(technicalAudit),
