@@ -226,6 +226,7 @@ export class DashboardService {
   }
 
   async cmoSummary(organizationId: string) {
+    await this.ensureCmoSchedules(organizationId);
     let metrics = await this.query(organizationId, 'executive', 30);
     if (metrics.length === 0) {
       await this.refresh(organizationId);
@@ -239,6 +240,31 @@ export class DashboardService {
       this.database.db.selectFrom('capere.integrations').select(['provider','status','last_sync_at','last_error']).where('organization_id','=',organizationId).execute(),
     ]);
     return { generatedAt:new Date().toISOString(), metrics, insights, recommendations, briefs, tasks, integrations, evidenceComplete:metrics.length>0||insights.length>0||recommendations.length>0 };
+  }
+
+  /** Ensures the CMO pipeline exists for older organizations created before
+   * the scheduler provisioning was introduced. The conflict key makes this
+   * safe to call from every dashboard request and for every tenant. */
+  private async ensureCmoSchedules(organizationId: string): Promise<void> {
+    const now = Date.now();
+    const jobs = [
+      { jobType: 'insights-sweep', name: `insights-sweep:${organizationId}`, schedule: 'daily', delay: 0 },
+      { jobType: 'recommendation-sweep', name: `recommendation-sweep:${organizationId}`, schedule: 'daily', delay: 90_000 },
+      { jobType: 'dashboard-refresh', name: `dashboard-refresh:${organizationId}`, schedule: 'daily', delay: 180_000 },
+      { jobType: 'daily-brief', name: `daily-brief:${organizationId}`, schedule: 'daily', delay: 270_000 },
+      { jobType: 'weekly-report', name: `weekly-report:${organizationId}`, schedule: 'weekly', delay: 360_000 },
+    ] as const;
+    for (const job of jobs) {
+      await this.database.db.insertInto('capere.scheduled_jobs').values({
+        organization_id: organizationId,
+        job_type: job.jobType,
+        name: job.name,
+        schedule: job.schedule,
+        enabled: true,
+        next_run_at: new Date(now + job.delay),
+        payload: JSON.stringify({ organizationId }),
+      }).onConflict((oc) => oc.columns(['organization_id','name']).doUpdateSet({ enabled: true })).execute();
+    }
   }
 
   async seoCommandCenter(organizationId: string) {
