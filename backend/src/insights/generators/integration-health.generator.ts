@@ -81,30 +81,6 @@ export class IntegrationHealthGenerator implements InsightGenerator {
 
       if (integration.status !== 'connected') continue;
 
-      // An OAuth token expiring soon is a disconnection that has not happened
-      // yet — worth flagging while it is still trivially fixable.
-      if (integration.expires_at) {
-        const hoursUntilExpiry = (integration.expires_at.getTime() - now) / 3_600_000;
-        if (hoursUntilExpiry < 24 && hoursUntilExpiry > 0) {
-          drafts.push({
-            category: 'operations',
-            severity: 'medium',
-            title: `${label} access expires within 24 hours`,
-            body:
-              `The ${label} authorization expires soon. If it is not refreshed, ` +
-              `data collection will stop without further warning.`,
-            dedupeKey: `integration_expiring:${integration.provider}`,
-            payload: {
-              integrationId: integration.id,
-              provider: integration.provider,
-              expiresAt: integration.expires_at.toISOString(),
-            },
-            // Self-clears once the moment has passed, whatever the outcome.
-            expiresAt: integration.expires_at,
-          });
-        }
-      }
-
       // Connected but silent: the most dangerous state, because the UI says
       // everything is fine while the data quietly goes stale.
       if (integration.last_sync_at) {
