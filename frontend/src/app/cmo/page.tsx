@@ -1,4 +1,5 @@
 import { EmbeddedModule } from '@/components/embedded-module';
+import { CmoTaskQueue } from '@/components/cmo-task-queue';
 import { capereFetch, type Envelope } from '@/lib/api';
 
 const sections = [
@@ -51,6 +52,7 @@ type Task = {
   kind: string;
   status: string;
   title: string;
+  payload?: unknown;
   error: string | null;
   approved_at: string | null;
   executed_at: string | null;
@@ -290,47 +292,30 @@ export default async function CmoPage({
   else if (view === 'tasks')
     content = (
       <div className="cmo-layout">
-        <div className="grid grid-3">
+        <div className="grid grid-4">
           <Card
-            label="Open tasks"
-            value={String(activeTasks.length)}
-            detail="Draft, approved, or running"
+            label="Needs approval"
+            value={String(tasks.filter((t) => t.status === 'draft').length)}
+            detail="Actions waiting for your review"
+          />
+          <Card
+            label="In progress"
+            value={String(tasks.filter((t) => ['approved', 'executing'].includes(t.status)).length)}
+            detail="Approved or currently running"
           />
           <Card
             label="Completed"
             value={String(tasks.filter((t) => t.status === 'succeeded').length)}
-            detail="Successfully executed actions"
+            detail="Successfully finished actions"
           />
-          <Card
-            label="Needs attention"
-            value={String(tasks.filter((t) => t.status === 'failed').length)}
-            detail="Failed actions requiring review"
-          />
+          <Card label="Needs attention" value={String(tasks.filter((t) => t.status === 'failed').length)} detail="Actions requiring review" />
         </div>
         <Section
-          title="CMO task activity"
-          subtitle="Approved actions and automated work, with clear execution status."
+          title="Action queue"
+          subtitle="Review recommended actions, track approved work, and see what has already been completed."
         >
           {tasks.length ? (
-            <div className="cmo-table">
-              <div className="cmo-table-head">
-                <span>Task</span>
-                <span>Type</span>
-                <span>Status</span>
-                <span>Updated</span>
-              </div>
-              {tasks.map((t) => (
-                <div className="cmo-table-row" key={t.id}>
-                  <strong>{t.title}</strong>
-                  <span>{label(t.kind)}</span>
-                  <span className={`cmo-task-status ${t.status}`}>{label(t.status)}</span>
-                  <span>
-                    {new Date(t.executed_at ?? t.approved_at ?? t.created_at).toLocaleDateString()}
-                  </span>
-                  {t.error && <small>{t.error}</small>}
-                </div>
-              ))}
-            </div>
+            <CmoTaskQueue tasks={tasks} />
           ) : (
             <State
               title="No CMO tasks yet"

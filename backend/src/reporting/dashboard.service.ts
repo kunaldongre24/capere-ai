@@ -245,7 +245,7 @@ export class DashboardService {
       this.database.db.selectFrom('capere.insights').select(['id','category','severity','title','body','confidence','created_at']).where('organization_id','=',organizationId).where('status','=','active').orderBy('created_at','desc').limit(30).execute(),
       this.database.db.selectFrom('capere.recommendations as r').leftJoin('capere.insights as i',(join)=>join.onRef('i.organization_id','=','r.organization_id').onRef('i.id','=','r.source_insight_id')).selectAll('r').where('r.organization_id','=',organizationId).where('r.status','in',['proposed','approved','in_progress']).where((eb)=>eb.or([eb('r.source_insight_id','is',null),eb('i.status','=','active')])).orderBy('r.created_at','desc').limit(30).execute(),
       this.database.db.selectFrom('capere.generated_artifacts').select(['id','artifact_date','title','content','status','created_at']).where('organization_id','=',organizationId).where('kind','=','daily_brief').orderBy('artifact_date','desc').limit(10).execute(),
-      this.database.db.selectFrom('capere.automation_actions').select(['id','kind','status','title','error','approved_at','executed_at','created_at']).where('organization_id','=',organizationId).orderBy('created_at','desc').limit(30).execute(),
+      this.database.db.selectFrom('capere.automation_actions').select(['id','kind','status','title','payload','error','approved_at','executed_at','created_at']).where('organization_id','=',organizationId).orderBy('created_at','desc').limit(30).execute(),
       this.database.db.selectFrom('capere.integrations').select(['provider','status','last_sync_at','last_error']).where('organization_id','=',organizationId).execute(),
     ]);
     const pipeline = await this.pipelineSummary(organizationId);
