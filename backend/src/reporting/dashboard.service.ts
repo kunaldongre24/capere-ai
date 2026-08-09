@@ -375,6 +375,7 @@ export class DashboardService {
     const pages = this.object(root['page_metrics']);
     return {
       pagesCrawled: Number(crawl['pages_crawled'] ?? domain['total_pages'] ?? 0),
+      totalPages: Number(domain['total_pages'] ?? crawl['pages_crawled'] ?? 0),
       pagesQueued: Number(crawl['pages_in_queue'] ?? 0),
       crawlLimit: Number(crawl['max_crawl_pages'] ?? 0),
       crawlStatus: String(root['crawl_progress'] ?? domain['extended_crawl_status'] ?? 'unknown'),
