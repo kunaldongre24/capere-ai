@@ -63,6 +63,7 @@ type Integration = {
   last_error: string | null;
 };
 type Pipeline = { connected:boolean; returned:number; total:number; pipelineValue:number; byStatus:Record<string,number>; error:string|null; locationName?:string };
+type Performance = { periodDays:number; currentSessions:number; previousSessions:number; currentSearchClicks:number; currentSearchImpressions:number; searchAveragePosition:number|null };
 
 const Card = ({ label, value, detail }: { label: string; value: string; detail: string }) => (
   <div className="card cmo-summary">
@@ -122,6 +123,7 @@ export default async function CmoPage({
   const tasks = (Array.isArray(d.tasks) ? d.tasks : []) as Task[];
   const integrations = (Array.isArray(d.integrations) ? d.integrations : []) as Integration[];
   const pipeline = (d.pipeline && typeof d.pipeline === 'object' ? d.pipeline : { connected:false, returned:0, total:0, pipelineValue:0, byStatus:{}, error:null }) as Pipeline;
+  const performance = (d.performance && typeof d.performance === 'object' ? d.performance : { periodDays:7, currentSessions:0, previousSessions:0, currentSearchClicks:0, currentSearchImpressions:0, searchAveragePosition:null }) as Performance;
   const latest = (name: string) => metrics.find((m) => m.metric_name === name)?.metric_value;
   const activeTasks = tasks.filter((t) => ['draft', 'approved', 'executing'].includes(t.status));
   const revenueRecs = recommendations.filter((r) => r.category === 'revenue');
@@ -246,13 +248,13 @@ export default async function CmoPage({
           />
           <Card
             label="Website visits"
-            value={latest('sessions') ?? latest('clicks') ?? '—'}
-            detail="Recent recorded traffic"
+            value={String(performance.currentSessions)}
+            detail={`Latest ${performance.periodDays} days`}
           />
           <Card
             label="Search appearances"
-            value={latest('impressions') ?? '—'}
-            detail="Visibility in Google Search"
+            value={String(performance.currentSearchImpressions)}
+            detail={`Latest ${performance.periodDays} days`}
           />
         </div>
         <Section

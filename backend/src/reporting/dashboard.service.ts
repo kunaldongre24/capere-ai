@@ -236,6 +236,8 @@ export class DashboardService {
       await this.refresh(organizationId);
       metrics = await this.query(organizationId, 'executive', 30);
     }
+    const seoMetrics = await this.query(organizationId, 'seo', 30);
+    const performance = this.cmoPerformance(metrics, seoMetrics);
     const [insights, recommendations, briefs, tasks, integrations] = await Promise.all([
       this.database.db.selectFrom('capere.insights').select(['id','category','severity','title','body','confidence','created_at']).where('organization_id','=',organizationId).where('status','=','active').orderBy('created_at','desc').limit(30).execute(),
       this.database.db.selectFrom('capere.recommendations as r').leftJoin('capere.insights as i',(join)=>join.onRef('i.organization_id','=','r.organization_id').onRef('i.id','=','r.source_insight_id')).selectAll('r').where('r.organization_id','=',organizationId).where('r.status','in',['proposed','approved','in_progress']).where((eb)=>eb.or([eb('r.source_insight_id','is',null),eb('i.status','=','active')])).orderBy('r.created_at','desc').limit(30).execute(),
@@ -244,7 +246,29 @@ export class DashboardService {
       this.database.db.selectFrom('capere.integrations').select(['provider','status','last_sync_at','last_error']).where('organization_id','=',organizationId).execute(),
     ]);
     const pipeline = await this.pipelineSummary(organizationId);
-    return { generatedAt:new Date().toISOString(), metrics, insights, recommendations, briefs, tasks, integrations, pipeline, evidenceComplete:metrics.length>0||insights.length>0||recommendations.length>0||pipeline.connected };
+    return { generatedAt:new Date().toISOString(), metrics, seoMetrics, performance, insights, recommendations, briefs, tasks, integrations, pipeline, evidenceComplete:metrics.length>0||seoMetrics.length>0||insights.length>0||recommendations.length>0||pipeline.connected };
+  }
+
+  private cmoPerformance(metrics: Array<{ metric_name: string; metric_value: string; metric_date: string; dimension_key?: string }>, seoMetrics: Array<{ metric_name: string; metric_value: string; metric_date: string; dimension_key?: string }>) {
+    const today = new Date();
+    const currentStart = new Date(today.getTime() - 6 * 86_400_000).toISOString().slice(0, 10);
+    const previousStart = new Date(today.getTime() - 13 * 86_400_000).toISOString().slice(0, 10);
+    const currentEnd = today.toISOString().slice(0, 10);
+    const sum = (rows: typeof metrics, name: string, start: string, end: string) => rows
+      .filter((row) => row.metric_name === name && (!row.dimension_key || row.dimension_key === '') && row.metric_date >= start && row.metric_date <= end)
+      .reduce((total, row) => total + (Number(row.metric_value) || 0), 0);
+    return {
+      periodDays: 7,
+      currentSessions: sum(metrics, 'sessions', currentStart, currentEnd),
+      previousSessions: sum(metrics, 'sessions', previousStart, new Date(today.getTime() - 7 * 86_400_000).toISOString().slice(0, 10)),
+      currentSearchClicks: sum(seoMetrics, 'clicks', currentStart, currentEnd),
+      currentSearchImpressions: sum(seoMetrics, 'impressions', currentStart, currentEnd),
+      searchAveragePosition: (() => {
+        const rows = seoMetrics.filter((row) => row.metric_name === 'position' && (!row.dimension_key || row.dimension_key === '') && row.metric_date >= currentStart && row.metric_date <= currentEnd);
+        if (!rows.length) return null;
+        return rows.reduce((total, row) => total + (Number(row.metric_value) || 0), 0) / rows.length;
+      })(),
+    };
   }
 
   private async pipelineSummary(organizationId: string) {
