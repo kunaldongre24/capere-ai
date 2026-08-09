@@ -41,6 +41,7 @@ export class RecommendationService {
   ) {}
 
   async generateFromInsights(organizationId: string): Promise<number> {
+    await this.dismissRecommendationsFromInactiveInsights(organizationId);
     const insights = await this.database.db
       .selectFrom('capere.insights')
       .select([
@@ -119,6 +120,33 @@ export class RecommendationService {
       if (row) created += 1;
     }
     return created;
+  }
+
+  private async dismissRecommendationsFromInactiveInsights(organizationId: string): Promise<void> {
+    const stale = await this.database.db
+      .selectFrom('capere.recommendations as r')
+      .innerJoin('capere.insights as i', (join) =>
+        join
+          .onRef('i.organization_id', '=', 'r.organization_id')
+          .onRef('i.id', '=', 'r.source_insight_id'),
+      )
+      .select(['r.id', 'r.status', 'r.title'])
+      .where('r.organization_id', '=', organizationId)
+      .where('r.status', 'in', ['proposed', 'approved'])
+      .where((eb) =>
+        eb.or([
+          eb('i.status', '<>', 'active'),
+          eb.and([eb('i.expires_at', 'is not', null), eb('i.expires_at', '<=', new Date())]),
+        ]),
+      )
+      .execute();
+    if (stale.length === 0) return;
+    await this.database.transaction(async (trx) => {
+      for (const row of stale) {
+        await trx.updateTable('capere.recommendations').set({ status: 'dismissed' }).where('organization_id', '=', organizationId).where('id', '=', row.id).execute();
+        await trx.insertInto('capere.recommendation_history').values({ organization_id: organizationId, recommendation_id: row.id, from_status: row.status, to_status: 'dismissed', reason: 'Source insight is no longer active', snapshot: JSON.stringify({ title: row.title }) }).execute();
+      }
+    });
   }
 
   async list(organizationId: string, status?: RecommendationStatus, limit = 50) {
