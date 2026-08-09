@@ -282,6 +282,7 @@ export class DashboardService {
       metrics,
       recommendations,
       technicalAudit: technicalAudit ?? null,
+      technicalFindings: technicalAudit ? this.technicalFindings(technicalAudit.summary) : [],
       auditHistory,
       project: project ?? null,
       keywords,
@@ -341,6 +342,27 @@ export class DashboardService {
     return value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};
+  }
+
+  private technicalFindings(summary: unknown) {
+    const root = this.object(summary);
+    const domainChecks = this.object(this.object(root['domain_info'])['checks']);
+    const pageChecks = this.object(this.object(root['page_metrics'])['checks']);
+    const catalog: Record<string, { title: string; severity: 'high' | 'medium' | 'low'; meaning: string; action: string }> = {
+      sitemap: { title: 'XML sitemap not detected', severity: 'high', meaning: 'Search engines have less guidance for discovering and prioritizing pages.', action: 'Publish an XML sitemap and reference it in robots.txt and Search Console.' },
+      robots_txt: { title: 'robots.txt not detected', severity: 'medium', meaning: 'Crawler access rules and sitemap location are not explicitly declared.', action: 'Add a robots.txt file with appropriate crawl rules and a sitemap URL.' },
+      no_image_title: { title: 'Image title attribute missing', severity: 'low', meaning: 'At least one image lacks optional descriptive title metadata.', action: 'Add useful image titles where they improve context; prioritize accurate alt text first.' },
+      has_render_blocking_resources: { title: 'Render-blocking resources detected', severity: 'medium', meaning: 'CSS or JavaScript may delay the initial visible page render.', action: 'Inline critical CSS, defer non-critical scripts, and preload essential assets.' },
+    };
+    const findings: Array<{ code: string; title: string; severity: string; count: number; meaning: string; action: string }> = [];
+    for (const key of ['sitemap', 'robots_txt']) {
+      if (domainChecks[key] === false) findings.push({ code: key, count: 1, ...catalog[key] });
+    }
+    for (const [key, raw] of Object.entries(pageChecks)) {
+      const count = Number(raw);
+      if (count > 0 && catalog[key]) findings.push({ code: key, count, ...catalog[key] });
+    }
+    return findings;
   }
 
   private dateString(value: unknown): string {
