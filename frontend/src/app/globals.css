@@ -1025,3 +1025,5 @@ input {
     min-height: auto;
   }
 }
+
+.report-layout,.cmo-layout{display:grid;gap:14px}.report-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:22px}.report-hero .card-title{margin:7px 0 5px}.report-body{padding:22px}.report-body pre{white-space:pre-wrap;font:inherit;line-height:1.65;color:#44546f;margin:0}.report-placeholder{min-height:120px}.report-placeholder .metric{margin:10px 0 3px}.cmo-summary{min-height:125px}.cmo-summary .metric{margin:10px 0 3px}
