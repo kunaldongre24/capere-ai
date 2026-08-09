@@ -6,7 +6,7 @@ import { DatabaseService } from '../../shared/database';
 import { EventType, OutboxService } from '../../shared/events';
 import { AppException, ErrorCode } from '../../shared/http';
 import { DataForSeoAdapter } from './dataforseo.adapter';
-import type { CreateSeoProjectDto, RunSeoAuditDto } from './dataforseo.dto';
+import type { CreateCompetitorDto, CreateSeoProjectDto, RunSeoAuditDto } from './dataforseo.dto';
 
 @Injectable()
 export class DataForSeoService {
@@ -46,6 +46,21 @@ export class DataForSeoService {
       )
       .returning(['id', 'provider', 'status'])
       .executeTakeFirstOrThrow();
+  }
+
+  async addCompetitor(organizationId: string, projectId: string, dto: CreateCompetitorDto) {
+    const project = await this.database.db.selectFrom('capere.seo_projects').select('id').where('organization_id','=',organizationId).where('id','=',projectId).executeTakeFirst();
+    if (!project) throw AppException.notFound(ErrorCode.NOT_FOUND, 'SEO project not found');
+    let domain = dto.domain.trim().toLowerCase();
+    try { domain = new URL(domain.includes('://') ? domain : `https://${domain}`).hostname.toLowerCase().replace(/^www\./,'').replace(/\.$/,''); } catch { throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'Enter a valid competitor website'); }
+    if (!domain || domain.includes(' ')) throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'Enter a valid competitor website');
+    return this.database.db.insertInto('capere.competitors').values({ organization_id: organizationId, seo_project_id: projectId, domain, name: dto.name.trim(), metrics: JSON.stringify({ status: 'configured', message: 'Comparison data will appear after the next refresh.' }), last_checked_at: null }).onConflict((c)=>c.columns(['organization_id','seo_project_id','domain']).doUpdateSet({name:dto.name.trim(),updated_at:new Date()})).returningAll().executeTakeFirstOrThrow();
+  }
+
+  async removeCompetitor(organizationId: string, projectId: string, competitorId: string) {
+    const deleted = await this.database.db.deleteFrom('capere.competitors').where('organization_id','=',organizationId).where('seo_project_id','=',projectId).where('id','=',competitorId).returning('id').executeTakeFirst();
+    if (!deleted) throw AppException.notFound(ErrorCode.NOT_FOUND, 'Competitor not found');
+    return { deleted: true, id: deleted.id };
   }
 
   async createProject(organizationId: string, dto: CreateSeoProjectDto) {

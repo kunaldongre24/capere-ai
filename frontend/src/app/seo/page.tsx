@@ -1,4 +1,5 @@
 import { EmbeddedModule } from '@/components/embedded-module';
+import { CompetitorControls } from '@/components/competitor-controls';
 import { capereFetch, Envelope } from '@/lib/api';
 
 const sections = [
@@ -476,6 +477,7 @@ export default async function SeoPage({
   } else if (view === 'competitors')
     content = (
       <div className="grid">
+        <CompetitorControls projectId={typeof d.project==='object'&&d.project&&'id' in d.project?String((d.project as {id:string}).id):undefined}/>
         <div className="grid grid-3">
           <Card
             title="Competitors added"

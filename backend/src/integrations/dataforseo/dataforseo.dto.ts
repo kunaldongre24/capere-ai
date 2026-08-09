@@ -10,3 +10,8 @@ export class CreateSeoProjectDto {
 export class RunSeoAuditDto {
   @IsInt() @Min(1) @Max(20) maxCrawlPages = 20;
 }
+
+export class CreateCompetitorDto {
+  @IsString() @Length(1, 120) domain!: string;
+  @IsString() @Length(1, 200) name!: string;
+}

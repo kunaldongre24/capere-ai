@@ -1,0 +1,8 @@
+'use client';
+import { useState } from 'react';
+
+export function CompetitorControls({ projectId }: { projectId?: string }) {
+  const [domain, setDomain] = useState(''); const [name, setName] = useState(''); const [busy, setBusy] = useState(false); const [message, setMessage] = useState<string | null>(null);
+  async function add() { if (!projectId || !domain || !name) return; setBusy(true); setMessage(null); try { const r = await fetch(`/api/capere/integrations/data-for-seo/projects/${projectId}/competitors`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({domain,name}) }); const b=await r.json(); if(!r.ok) throw new Error(b?.error?.message??'Could not add competitor'); setDomain(''); setName(''); setMessage('Competitor added. Comparison data will appear after the next refresh.'); window.location.reload(); } catch(e) { setMessage(e instanceof Error?e.message:'Could not add competitor'); } finally { setBusy(false); } }
+  return <div className="competitor-setup"><div><div className="eyebrow">Comparison setup</div><strong>Add businesses you want to compare</strong><p className="muted">Use the competitor’s website address. Capere will prepare search visibility comparisons automatically.</p></div><div className="competitor-form"><input className="form-input" value={name} onChange={e=>setName(e.target.value)} placeholder="Business name"/><input className="form-input" value={domain} onChange={e=>setDomain(e.target.value)} placeholder="competitor.com"/><button className="btn" type="button" disabled={busy||!projectId||!name||!domain} onClick={add}>{busy?'Adding…':'Add competitor'}</button></div>{message&&<p className="form-message">{message}</p>}</div>;
+}

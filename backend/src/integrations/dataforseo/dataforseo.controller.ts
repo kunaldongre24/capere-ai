@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentOrg, Public, Roles } from '../../auth';
-import { CreateSeoProjectDto, RunSeoAuditDto } from './dataforseo.dto';
+import { CreateCompetitorDto, CreateSeoProjectDto, RunSeoAuditDto } from './dataforseo.dto';
 import { DataForSeoService } from './dataforseo.service';
 
 @ApiTags('data-for-seo')
@@ -22,6 +22,16 @@ export class DataForSeoController {
     @Body() dto: RunSeoAuditDto,
   ) {
     return this.service.submitAudit(org, id, dto);
+  }
+  @Post('projects/:id/competitors')
+  @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
+  addCompetitor(@CurrentOrg() org: string, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateCompetitorDto) {
+    return this.service.addCompetitor(org, id, dto);
+  }
+  @Delete('projects/:id/competitors/:competitorId')
+  @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
+  removeCompetitor(@CurrentOrg() org: string, @Param('id', ParseUUIDPipe) id: string, @Param('competitorId', ParseUUIDPipe) competitorId: string) {
+    return this.service.removeCompetitor(org, id, competitorId);
   }
   @Post('tasks/:id/poll')
   @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
