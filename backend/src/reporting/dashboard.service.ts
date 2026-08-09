@@ -231,7 +231,7 @@ export class DashboardService {
       await this.refresh(organizationId);
       metrics = await this.query(organizationId, 'seo', 30);
     }
-    const [recommendations, technicalAudit, auditHistory, project, keywords, competitors, integrations] = await Promise.all([
+    const [recommendationsResult, technicalAuditResult, auditHistoryResult, projectResult, keywordsResult, competitorsResult, integrationsResult] = await Promise.allSettled([
       this.database.db
         .selectFrom('capere.recommendations')
         .selectAll()
@@ -269,6 +269,14 @@ export class DashboardService {
       this.database.db.selectFrom('capere.competitors').select(['domain','name','metrics','last_checked_at']).where('organization_id','=',organizationId).orderBy('last_checked_at','desc').limit(25).execute(),
       this.database.db.selectFrom('capere.integrations').select(['provider','status','last_sync_at','last_error']).where('organization_id','=',organizationId).execute(),
     ]);
+    const value = <T>(result: PromiseSettledResult<T>, fallback: T): T => result.status === 'fulfilled' ? result.value : fallback;
+    const recommendations = value(recommendationsResult, []);
+    const technicalAudit = value(technicalAuditResult, undefined);
+    const auditHistory = value(auditHistoryResult, []);
+    const project = value(projectResult, undefined);
+    const keywords = value(keywordsResult, []);
+    const competitors = value(competitorsResult, []);
+    const integrations = value(integrationsResult, []);
     return {
       generatedAt: new Date().toISOString(),
       metrics,

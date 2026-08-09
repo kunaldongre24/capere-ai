@@ -1,4 +1,4 @@
-import { Body, Controller, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentOrg, Public, Roles } from '../../auth';
 import { CreateSeoProjectDto, RunSeoAuditDto } from './dataforseo.dto';
@@ -33,5 +33,11 @@ export class DataForSeoController {
   @Public()
   webhook(@Req() req: { body: unknown }) {
     return this.service.handleWebhook(req.body);
+  }
+
+  @Get('webhook')
+  @Public()
+  webhookGet(@Query() query: Record<string, unknown>) {
+    return this.service.handleWebhook(query);
   }
 }
