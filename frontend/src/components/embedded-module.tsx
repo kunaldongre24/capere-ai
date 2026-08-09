@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { EmbeddedTabs } from './embedded-tabs';
 
 type Tab = { label: string; href: string; active?: boolean };
 
@@ -15,5 +15,5 @@ export function EmbeddedModule({
   tabs: Tab[];
   children: React.ReactNode;
 }) {
-  return <main className="embedded-app"><header className="embedded-header"><div className="embedded-brand"><span className="embedded-mark">C</span><span>Capere AI</span><span className="embedded-divider"/><span className="embedded-product">{product}</span></div><span className="connection-status"><span className="status-dot"/>GoHighLevel connected</span></header><section className="embedded-heading"><div><div className="eyebrow">{product}</div><h1 className="title">{title}</h1><p className="subtitle">{description}</p></div></section><nav className="embedded-tabs" aria-label={`${product} sections`}>{tabs.map((tab)=><Link key={tab.href} href={tab.href} className={`embedded-tab${tab.active?' active':''}`}>{tab.label}</Link>)}</nav><section className="embedded-content">{children}</section></main>;
+  return <main className="embedded-app"><header className="embedded-header"><div className="embedded-brand"><span className="embedded-mark">C</span><span>Capere AI</span><span className="embedded-divider"/><span className="embedded-product">{product}</span></div><span className="connection-status"><span className="status-dot"/>GoHighLevel connected</span></header><section className="embedded-heading"><div><div className="eyebrow">{product}</div><h1 className="title">{title}</h1><p className="subtitle">{description}</p></div></section><EmbeddedTabs product={product} tabs={tabs}/><section className="embedded-content">{children}</section></main>;
 }
