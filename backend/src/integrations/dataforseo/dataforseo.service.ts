@@ -272,13 +272,36 @@ export class DataForSeoService {
   }
 
   private score(result: Record<string, unknown>): number {
-    const value = Number(result['onpage_score'] ?? result['score'] ?? 0);
+    const pageMetrics = this.object(result['page_metrics']);
+    const value = Number(pageMetrics['onpage_score'] ?? result['onpage_score'] ?? result['score'] ?? 0);
     return Math.max(0, Math.min(100, Math.round(value)));
   }
   private issueCount(result: Record<string, unknown>): number {
-    const checks = result['checks'];
-    return checks && typeof checks === 'object'
-      ? Object.values(checks).filter(Boolean).length
-      : Number(result['total_issues'] ?? 0);
+    const pageMetrics = this.object(result['page_metrics']);
+    const checks = this.object(pageMetrics['checks']);
+    const healthySignals = new Set([
+      'is_https',
+      'canonical',
+      'has_html_doctype',
+      'seo_friendly_url',
+      'seo_friendly_url_dynamic_check',
+      'seo_friendly_url_keywords_check',
+      'seo_friendly_url_characters_check',
+      'seo_friendly_url_relative_length_check',
+    ]);
+    const pageIssues = Object.entries(checks).reduce((total, [key, value]) => {
+      if (healthySignals.has(key)) return total;
+      const count = Number(value);
+      return total + (Number.isFinite(count) && count > 0 ? count : 0);
+    }, 0);
+    const domainChecks = this.object(this.object(result['domain_info'])['checks']);
+    const missingDomainFiles = ['sitemap', 'robots_txt'].filter((key) => domainChecks[key] === false).length;
+    return pageIssues + missingDomainFiles || Number(result['total_issues'] ?? 0);
+  }
+
+  private object(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
   }
 }
