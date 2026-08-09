@@ -27,6 +27,7 @@ type Insight = {
 };
 type Recommendation = {
   id: string;
+  source_insight_id: string | null;
   category: string;
   priority: string;
   status: string;
@@ -365,23 +366,15 @@ export default async function CmoPage({
       </div>
     );
   else {
-    const brief = briefs[0];
+    const recommendedInsightIds = new Set(recommendations.map((r) => r.source_insight_id).filter(Boolean));
     const feed = [
-      ...(brief ? [{ id: `brief-${brief.id}`, kind: 'brief', title: brief.title, body: brief.content, action: null, date: brief.created_at, label: 'Daily brief', tone: 'blue' }] : []),
-      ...insights.map((i) => ({ id: `insight-${i.id}`, kind: 'insight', title: i.title, body: i.body, action: null, date: i.created_at, label: `${label(i.category)} insight`, tone: i.severity })),
+      ...insights.filter((i) => !recommendedInsightIds.has(i.id)).map((i) => ({ id: `insight-${i.id}`, kind: 'insight', title: i.title, body: i.body, action: null, date: i.created_at, label: `${label(i.category)} insight`, tone: i.severity })),
       ...recommendations.map((r) => ({ id: `recommendation-${r.id}`, kind: 'recommendation', title: r.title, body: r.rationale, action: r.action, date: r.created_at, label: `${label(r.priority)} priority recommendation`, tone: r.priority })),
       ...tasks.filter((t) => t.status !== 'draft').map((t) => ({ id: `task-${t.id}`, kind: 'task', title: t.title, body: `This ${label(t.kind).toLowerCase()} is currently ${label(t.status).toLowerCase()}.`, action: t.error ?? null, date: t.executed_at ?? t.approved_at ?? t.created_at, label: `Task · ${label(t.status)}`, tone: t.status === 'failed' ? 'critical' : 'green' })),
     ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     content = (
       <div className="cmo-layout">
         <div className="grid grid-4">
-          <Card
-            label="Current brief"
-            value={brief ? 'Ready' : 'Preparing'}
-            detail={
-              brief ? new Date(brief.artifact_date).toLocaleDateString() : 'Generated automatically'
-            }
-          />
           <Card
             label="Active insights"
             value={String(insights.length)}
@@ -399,7 +392,7 @@ export default async function CmoPage({
           />
         </div>
         <Section title="Morning brief" subtitle="A chronological feed of what changed, why it matters, and what to do next.">
-          {feed.length ? <div className="cmo-feed">{feed.map((item) => <article className="cmo-feed-item" key={item.id}><div className={`cmo-feed-avatar ${item.tone}`}>{item.kind==='brief'?'B':item.kind==='insight'?'!':item.kind==='recommendation'?'→':'✓'}</div><div className="cmo-feed-card"><div className="cmo-feed-meta"><span>{item.label}</span><time>{new Date(item.date).toLocaleString()}</time></div><h3>{item.title}</h3><p className="cmo-feed-body">{item.body}</p>{item.action&&<div className="cmo-feed-action"><strong>Next step</strong><span>{item.action}</span></div>}<div className="cmo-feed-footer"><span>AI CMO</span><span>Based on connected business data</span></div></div></article>)}</div>:<State title="Today’s brief is being prepared" body="The feed will fill automatically after synchronized metrics and recommendations are available."/>}
+          {feed.length ? <div className="cmo-feed">{feed.map((item) => <article className="cmo-feed-item" key={item.id}><div className={`cmo-feed-avatar ${item.tone}`}>{item.kind==='insight'?'!':item.kind==='recommendation'?'→':'✓'}</div><div className="cmo-feed-card"><div className="cmo-feed-meta"><span>{item.label}</span><time>{new Date(item.date).toLocaleString()}</time></div><h3>{item.title}</h3><p className="cmo-feed-body">{item.body}</p>{item.action&&<div className="cmo-feed-action"><strong>Next step</strong><span>{item.action}</span></div>}<div className="cmo-feed-footer"><span>AI CMO</span><span>Based on connected business data</span></div></div></article>)}</div>:<State title="No updates yet" body="The feed will fill automatically after synchronized metrics and recommendations are available."/>}
         </Section>
       </div>
     );
