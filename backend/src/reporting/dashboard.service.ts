@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { DatabaseService } from '../shared/database';
 import type { DashboardKind } from '../shared/database';
+import { GhlAdapter } from '../integrations/ghl/ghl.adapter';
+import { GhlTokenService } from '../integrations/ghl/ghl-token.service';
 
 const DASHBOARDS: readonly DashboardKind[] = [
   'executive',
@@ -13,7 +15,7 @@ const DASHBOARDS: readonly DashboardKind[] = [
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(private readonly database: DatabaseService, @Optional() private readonly ghl?: GhlAdapter, @Optional() private readonly ghlTokens?: GhlTokenService) {}
 
   kinds(): readonly DashboardKind[] {
     return DASHBOARDS;
@@ -241,7 +243,21 @@ export class DashboardService {
       this.database.db.selectFrom('capere.automation_actions').select(['id','kind','status','title','error','approved_at','executed_at','created_at']).where('organization_id','=',organizationId).orderBy('created_at','desc').limit(30).execute(),
       this.database.db.selectFrom('capere.integrations').select(['provider','status','last_sync_at','last_error']).where('organization_id','=',organizationId).execute(),
     ]);
-    return { generatedAt:new Date().toISOString(), metrics, insights, recommendations, briefs, tasks, integrations, evidenceComplete:metrics.length>0||insights.length>0||recommendations.length>0 };
+    const pipeline = await this.pipelineSummary(organizationId);
+    return { generatedAt:new Date().toISOString(), metrics, insights, recommendations, briefs, tasks, integrations, pipeline, evidenceComplete:metrics.length>0||insights.length>0||recommendations.length>0||pipeline.connected };
+  }
+
+  private async pipelineSummary(organizationId: string) {
+    if (!this.ghl || !this.ghlTokens) return { connected:false, returned:0, total:0, pipelineValue:0, byStatus:{}, error:'GoHighLevel pipeline data is unavailable.' };
+    const integration = await this.database.db.selectFrom('capere.integrations').select(['id','account_id','account_name']).where('organization_id','=',organizationId).where('provider','=','go_high_level').where('status','=','connected').orderBy('created_at','asc').executeTakeFirst();
+    if (!integration?.account_id) return { connected:false, returned:0, total:0, pipelineValue:0, byStatus:{}, error:'GoHighLevel is not connected.' };
+    try {
+      const credentials = await this.ghlTokens.credentials(organizationId, integration.id);
+      const opportunities: Array<{status?:string;monetaryValue?:number}> = []; let page=1; let reportedTotal:number|undefined;
+      while(opportunities.length<500){ const body=await this.ghl.getJson<{opportunities?:Array<{status?:string;monetaryValue?:number}>;meta?:{total?:number;nextPage?:number|null}}>(credentials,'opportunities/search',{location_id:integration.account_id,limit:Math.min(100,500-opportunities.length),page}); const rows=body.opportunities??[]; opportunities.push(...rows); reportedTotal??=body.meta?.total; if(!rows.length||opportunities.length>=500||(reportedTotal!==undefined&&opportunities.length>=reportedTotal)) break; page=body.meta?.nextPage??page+1; }
+      const byStatus:Record<string,number>={}; let pipelineValue=0; for(const opportunity of opportunities){const status=opportunity.status??'unknown';byStatus[status]=(byStatus[status]??0)+1;pipelineValue+=Number(opportunity.monetaryValue??0)||0;}
+      return {connected:true,integrationId:integration.id,locationName:integration.account_name,returned:opportunities.length,total:reportedTotal??opportunities.length,pipelineValue,byStatus,error:null};
+    } catch(error) { return {connected:true,returned:0,total:0,pipelineValue:0,byStatus:{},error:error instanceof Error?error.message:'GoHighLevel pipeline data is unavailable.'}; }
   }
 
   /** Ensures the CMO pipeline exists for older organizations created before

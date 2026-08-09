@@ -62,6 +62,7 @@ type Integration = {
   last_sync_at: string | null;
   last_error: string | null;
 };
+type Pipeline = { connected:boolean; returned:number; total:number; pipelineValue:number; byStatus:Record<string,number>; error:string|null; locationName?:string };
 
 const Card = ({ label, value, detail }: { label: string; value: string; detail: string }) => (
   <div className="card cmo-summary">
@@ -120,6 +121,7 @@ export default async function CmoPage({
   const briefs = (Array.isArray(d.briefs) ? d.briefs : []) as Brief[];
   const tasks = (Array.isArray(d.tasks) ? d.tasks : []) as Task[];
   const integrations = (Array.isArray(d.integrations) ? d.integrations : []) as Integration[];
+  const pipeline = (d.pipeline && typeof d.pipeline === 'object' ? d.pipeline : { connected:false, returned:0, total:0, pipelineValue:0, byStatus:{}, error:null }) as Pipeline;
   const latest = (name: string) => metrics.find((m) => m.metric_name === name)?.metric_value;
   const activeTasks = tasks.filter((t) => ['draft', 'approved', 'executing'].includes(t.status));
   const revenueRecs = recommendations.filter((r) => r.category === 'revenue');
@@ -186,22 +188,22 @@ export default async function CmoPage({
     content = (
       <div className="cmo-layout">
         <div className="grid grid-3">
-          <Card
-            label="Revenue opportunities"
-            value={String(revenueRecs.length)}
-            detail="Open growth recommendations"
-          />
+          <Card label="Open growth recommendations" value={String(revenueRecs.length)} detail="Actions linked to revenue signals" />
           <Card
             label="Pipeline value"
-            value={latest('pipeline_value') ?? '—'}
-            detail="Available from your CRM pipeline"
+            value={pipeline.connected ? pipeline.pipelineValue.toLocaleString(undefined,{style:'currency',currency:'USD',maximumFractionDigits:0}) : '—'}
+            detail={pipeline.error ? 'CRM data unavailable' : `${pipeline.total} opportunities in GoHighLevel`}
           />
           <Card
             label="Conversions"
-            value={latest('conversions') ?? '—'}
+            value={latest('conversions') ?? '0'}
             detail="Recent recorded conversions"
           />
         </div>
+        {pipeline.error && <div className="card cmo-provider-warning"><strong>Pipeline data needs attention</strong><p>{pipeline.error}. Revenue totals will update automatically after the connection is available.</p></div>}
+        <Section title="Pipeline overview" subtitle="A simple view of where current GoHighLevel opportunities stand.">
+          {pipeline.connected && pipeline.returned ? <div className="pipeline-status-grid">{Object.entries(pipeline.byStatus).map(([status,count])=><div className="pipeline-status" key={status}><span>{label(status)}</span><strong>{count}</strong><small>opportunit{count===1?'y':'ies'}</small></div>)}</div> : <State title="No pipeline opportunities found" body="GoHighLevel is connected, but no opportunity records are available for this location yet."/>}
+        </Section>
         <Section
           title="Revenue opportunities"
           subtitle="Practical ways to improve pipeline, retention, conversion, and client value."
@@ -226,8 +228,8 @@ export default async function CmoPage({
             </div>
           ) : (
             <State
-              title="No revenue opportunities identified yet"
-              body="CRM leads, opportunities, conversion activity, and recommendations will be assessed automatically as more activity is collected."
+              title="No additional revenue recommendations yet"
+              body={pipeline.returned ? 'Capere is monitoring the current pipeline and will recommend actions when a clear opportunity is supported by the data.' : 'Revenue recommendations will appear after GoHighLevel opportunity activity is available.'}
             />
           )}
         </Section>
