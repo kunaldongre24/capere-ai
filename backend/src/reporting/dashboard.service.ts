@@ -283,6 +283,7 @@ export class DashboardService {
       recommendations,
       technicalAudit: technicalAudit ?? null,
       technicalFindings: technicalAudit ? this.technicalFindings(technicalAudit.summary) : [],
+      technicalOverview: technicalAudit ? this.technicalOverview(technicalAudit.summary) : null,
       auditHistory,
       project: project ?? null,
       keywords,
@@ -363,6 +364,37 @@ export class DashboardService {
       if (count > 0 && catalog[key]) findings.push({ code: key, count, ...catalog[key] });
     }
     return findings;
+  }
+
+  private technicalOverview(summary: unknown) {
+    const root = this.object(summary);
+    const domain = this.object(root['domain_info']);
+    const domainChecks = this.object(domain['checks']);
+    const ssl = this.object(domain['ssl_info']);
+    const crawl = this.object(root['crawl_status']);
+    const pages = this.object(root['page_metrics']);
+    return {
+      pagesCrawled: Number(crawl['pages_crawled'] ?? domain['total_pages'] ?? 0),
+      pagesQueued: Number(crawl['pages_in_queue'] ?? 0),
+      crawlLimit: Number(crawl['max_crawl_pages'] ?? 0),
+      crawlStatus: String(root['crawl_progress'] ?? domain['extended_crawl_status'] ?? 'unknown'),
+      crawlStopReason: String(root['crawl_stop_reason'] ?? 'unknown'),
+      crawlStartedAt: domain['crawl_start'] ?? null,
+      crawlEndedAt: domain['crawl_end'] ?? null,
+      internalLinks: Number(pages['links_internal'] ?? 0),
+      externalLinks: Number(pages['links_external'] ?? 0),
+      brokenLinks: Number(pages['broken_links'] ?? 0),
+      brokenResources: Number(pages['broken_resources'] ?? 0),
+      nonIndexablePages: Number(pages['non_indexable'] ?? 0),
+      duplicateContent: Number(pages['duplicate_content'] ?? 0),
+      https: domainChecks['ssl'] === true,
+      http2: domainChecks['http2'] === true,
+      sitemap: domainChecks['sitemap'] === true,
+      robotsTxt: domainChecks['robots_txt'] === true,
+      certificateValid: ssl['valid_certificate'] === true,
+      certificateExpiresAt: ssl['certificate_expiration_date'] ?? null,
+      ip: domain['ip'] ?? null,
+    };
   }
 
   private dateString(value: unknown): string {
