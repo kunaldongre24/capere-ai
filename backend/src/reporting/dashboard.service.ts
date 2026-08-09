@@ -231,7 +231,7 @@ export class DashboardService {
       await this.refresh(organizationId);
       metrics = await this.query(organizationId, 'seo', 30);
     }
-    const [recommendations, technicalAudit] = await Promise.all([
+    const [recommendations, technicalAudit, auditHistory, project, keywords, competitors, integrations] = await Promise.all([
       this.database.db
         .selectFrom('capere.recommendations')
         .selectAll()
@@ -263,12 +263,22 @@ export class DashboardService {
         .orderBy('a.completed_at', 'desc')
         .limit(1)
         .executeTakeFirst(),
+      this.database.db.selectFrom('capere.technical_audits').select(['id','status','score','issue_count','started_at','completed_at']).where('organization_id','=',organizationId).orderBy('created_at','desc').limit(10).execute(),
+      this.database.db.selectFrom('capere.seo_projects').select(['id','name','site_url','enabled','target_location_code','language_code']).where('organization_id','=',organizationId).where('enabled','=',true).orderBy('created_at','desc').limit(1).executeTakeFirst(),
+      this.database.db.selectFrom('capere.keywords as k').leftJoin('capere.keyword_rankings as r','r.keyword_id','k.id').select(['k.keyword','k.tags','r.rank','r.checked_on','r.url']).where('k.organization_id','=',organizationId).where('k.enabled','=',true).orderBy('r.checked_on','desc').limit(50).execute(),
+      this.database.db.selectFrom('capere.competitors').select(['domain','name','metrics','last_checked_at']).where('organization_id','=',organizationId).orderBy('last_checked_at','desc').limit(25).execute(),
+      this.database.db.selectFrom('capere.integrations').select(['provider','status','last_sync_at','last_error']).where('organization_id','=',organizationId).execute(),
     ]);
     return {
       generatedAt: new Date().toISOString(),
       metrics,
       recommendations,
       technicalAudit: technicalAudit ?? null,
+      auditHistory,
+      project: project ?? null,
+      keywords,
+      competitors,
+      integrations,
       evidenceComplete: metrics.length > 0 || Boolean(technicalAudit),
     };
   }
