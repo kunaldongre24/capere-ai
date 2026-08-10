@@ -17,7 +17,7 @@ type IntegrationJob =
   | { kind: 'dataforseo-audit-poll'; organizationId: string; taskId: string }
   | { kind: 'dataforseo-audit-submit'; organizationId: string; projectId: string; maxCrawlPages: number }
   | { kind: 'dataforseo-competitor-refresh'; organizationId: string; projectId: string }
-  | { kind: 'dataforseo-keyword-refresh'; organizationId: string; projectId: string }
+  | { kind: 'dataforseo-keyword-refresh'; organizationId: string; projectId: string; force?: boolean }
   | { kind: 'github-change-execute'; organizationId: string; requestId: string };
 
 @Injectable()
@@ -69,7 +69,7 @@ export class IntegrationJobWorker {
     if (job.data.kind === 'dataforseo-competitor-refresh')
       return this.dataForSeo.refreshCompetitors(job.data.organizationId, job.data.projectId);
     if (job.data.kind === 'dataforseo-keyword-refresh')
-      return this.dataForSeo.refreshKeywords(job.data.organizationId, job.data.projectId);
+      return this.dataForSeo.refreshKeywords(job.data.organizationId, job.data.projectId, job.data.force === true);
     return this.github.executeApproved(job.data.organizationId, job.data.requestId);
   }
 }

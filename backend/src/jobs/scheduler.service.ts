@@ -349,10 +349,11 @@ export class SchedulerService {
     }
     if (jobType === 'dataforseo-keyword-refresh') {
       if (!organizationId) throw new Error('dataforseo-keyword-refresh requires an organization');
-      const projectId = this.objectPayload(payload)['projectId'];
+      const value = this.objectPayload(payload);
+      const projectId = value['projectId'];
       if (typeof projectId !== 'string') throw new Error('dataforseo-keyword-refresh requires payload.projectId');
       if (!this.queues) throw new Error('Queue registry is unavailable');
-      const job = await this.queues.get('integration-sync').add('dataforseo-keyword-refresh', { kind:'dataforseo-keyword-refresh',organizationId,projectId }, { jobId:`dataforseo-keyword-refresh-${organizationId}-${projectId}-${Date.now()}` });
+      const job = await this.queues.get('integration-sync').add('dataforseo-keyword-refresh', { kind:'dataforseo-keyword-refresh',organizationId,projectId,force:value['force'] === true }, { jobId:`dataforseo-keyword-refresh-${organizationId}-${projectId}-${Date.now()}` });
       return { queuedJobId: job.id };
     }
     if (jobType === 'github-change-execute') {

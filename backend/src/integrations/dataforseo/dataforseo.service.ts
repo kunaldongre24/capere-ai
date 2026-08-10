@@ -131,11 +131,11 @@ export class DataForSeoService {
     return { refreshed: competitors.length, cost: Number(task?.cost ?? 0) + detailCost, checkedAt: checkedAt.toISOString() };
   }
 
-  async refreshKeywords(organizationId: string, projectId: string) {
+  async refreshKeywords(organizationId: string, projectId: string, force = false) {
     const project = await this.database.db.selectFrom('capere.seo_projects').selectAll().where('organization_id','=',organizationId).where('id','=',projectId).executeTakeFirst();
     if (!project) throw AppException.notFound(ErrorCode.NOT_FOUND, 'SEO project not found');
     const recent = await this.database.db.selectFrom('capere.provider_tasks').select('updated_at').where('organization_id','=',organizationId).where('provider','=','data_for_seo').where('task_type','=','keyword_overview').orderBy('updated_at','desc').executeTakeFirst();
-    if (recent && new Date(recent.updated_at).getTime() >= Date.now() - 6 * 3_600_000) return { refreshed:0,cached:true,message:'Keyword data is already current.' };
+    if (!force && recent && new Date(recent.updated_at).getTime() >= Date.now() - 6 * 3_600_000) return { refreshed:0,cached:true,message:'Keyword data is already current.' };
     const start = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0,10);
     const [gscRows, competitors] = await Promise.all([
       this.database.db.selectFrom('capere.analytics_daily').select(['dimensions','metrics']).where('organization_id','=',organizationId).where('provider','=','google_search_console').where('metric_date','>=',start).execute(),
@@ -221,7 +221,7 @@ export class DataForSeoService {
         payload: JSON.stringify({ projectId: project.id, maxCrawlPages: 20 }),
       }))
       .execute();
-    await this.database.db.insertInto('capere.scheduled_jobs').values({ organization_id:organizationId,job_type:'dataforseo-keyword-refresh',name:`dataforseo-keywords:${project.id}`,schedule:'weekly',enabled:true,next_run_at:new Date(Date.now()+15*60_000),payload:JSON.stringify({projectId:project.id}) }).onConflict((oc)=>oc.columns(['organization_id','name']).doUpdateSet({enabled:true,payload:JSON.stringify({projectId:project.id})})).execute();
+    await this.database.db.insertInto('capere.scheduled_jobs').values({ organization_id:organizationId,job_type:'dataforseo-keyword-refresh',name:`dataforseo-keywords:${project.id}`,schedule:'weekly',enabled:true,next_run_at:new Date(Date.now()+15*60_000),payload:JSON.stringify({projectId:project.id,force:true}) }).onConflict((oc)=>oc.columns(['organization_id','name']).doUpdateSet({enabled:true,payload:JSON.stringify({projectId:project.id,force:true})})).execute();
     return project;
   }
 
