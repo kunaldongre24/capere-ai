@@ -466,8 +466,8 @@ export default async function SeoPage({
           />
           <Card
             title="Your ranking search terms"
-            value={Math.round(targetMetrics?.targetRankingKeywords ?? 0).toLocaleString()}
-            detail={targetDomain}
+            value={(targetMetrics?.targetRankingKeywords ?? 0) > 0 ? Math.round(targetMetrics?.targetRankingKeywords ?? 0).toLocaleString() : '—'}
+            detail={(targetMetrics?.targetRankingKeywords ?? 0) > 0 ? targetDomain : 'No measurable organic visibility found yet'}
             icon="keywords"
           />
           <Card
@@ -486,7 +486,7 @@ export default async function SeoPage({
             <div className="comparison-table-wrap"><table className="comparison-table"><thead><tr><th>Measure</th><th><strong>{project?.name ?? 'Your business'}</strong><small>{targetDomain}</small></th>{competitors.map((c)=><th key={c.domain}><strong>{c.name ?? c.domain}</strong><small>{c.domain}</small></th>)}</tr></thead><tbody>{[
               {label:'Estimated organic visits',detail:'Potential monthly visits from unpaid search',target:Number(targetMetrics?.targetOrganicTraffic??0),value:(c:typeof competitors[number])=>Number(c.metrics?.organicTraffic??0)},
               {label:'Ranking search terms',detail:'Search phrases where the website appears',target:Number(targetMetrics?.targetRankingKeywords??0),value:(c:typeof competitors[number])=>Number(c.metrics?.rankingKeywords??0)},
-            ].map((metric)=>{const values=[metric.target,...competitors.map(metric.value)];const maximum=Math.max(...values);return <tr key={metric.label}><th><strong>{metric.label}</strong><small>{metric.detail}</small></th>{values.map((value,index)=>{const ready=index===0||competitors[index-1]?.metrics?.status==='ready';const tone=!ready||maximum===0?'neutral':value===maximum?'good':'bad';const gap=maximum-value;return <td className={`comparison-${tone}`} key={index}><strong>{ready?Math.round(value).toLocaleString():'—'}</strong><small>{!ready?'Waiting for data':maximum===0?'No visibility recorded':gap===0?'Strongest result':`${Math.round(gap).toLocaleString()} behind leader`}</small></td>})}</tr>})}</tbody></table></div>
+            ].map((metric)=>{const values=[metric.target,...competitors.map(metric.value)];const maximum=Math.max(...values);return <tr key={metric.label}><th><strong>{metric.label}</strong><small>{metric.detail}</small></th>{values.map((value,index)=>{const ready=index===0||competitors[index-1]?.metrics?.status==='ready';const tone=!ready||value===0||maximum===0?'neutral':value===maximum?'good':'bad';const gap=maximum-value;return <td className={`comparison-${tone}`} key={index}><strong>{ready&&value>0?Math.round(value).toLocaleString():'—'}</strong><small>{!ready?'Waiting for data':value===0?'No measurable organic visibility found yet':gap===0?'Strongest result':`${Math.round(gap).toLocaleString()} behind leader`}</small></td>})}</tr>})}</tbody></table></div>
           ) : (
             <p>
               Your website review is active, but no comparison businesses have been added. Add a few
