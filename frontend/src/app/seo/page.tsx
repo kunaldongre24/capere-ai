@@ -431,7 +431,7 @@ export default async function SeoPage({
   } else if (view === 'competitors')
     content = (
       <div className="grid">
-        <CompetitorControls projectId={project?.id}/>
+        <CompetitorControls projectId={project?.id} competitorCount={competitors.length}/>
         <div className="grid grid-3">
           <Card
             title="Competitors added"

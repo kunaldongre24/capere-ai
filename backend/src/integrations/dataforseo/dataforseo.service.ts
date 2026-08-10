@@ -62,33 +62,49 @@ export class DataForSeoService {
       .where('organization_id', '=', organizationId)
       .where('seo_project_id', '=', projectId)
       .orderBy('created_at')
-      .limit(10)
+      .limit(4)
       .execute();
   }
 
+  private latestCompetitorRefresh(organizationId: string, projectId: string, target: string) {
+    return this.database.db
+      .selectFrom('capere.provider_tasks')
+      .select('updated_at')
+      .where('organization_id', '=', organizationId)
+      .where('provider', '=', 'data_for_seo')
+      .where('task_type', '=', 'competitor_bulk_traffic')
+      .where('status', '=', 'succeeded')
+      .where(sql<boolean>`(request->>'projectId' = ${projectId} OR request->'targets' @> ${JSON.stringify([target])}::jsonb)`)
+      .orderBy('updated_at', 'desc')
+      .executeTakeFirst();
+  }
+
   async addCompetitor(organizationId: string, projectId: string, dto: CreateCompetitorDto) {
-    const project = await this.database.db.selectFrom('capere.seo_projects').select('id').where('organization_id','=',organizationId).where('id','=',projectId).executeTakeFirst();
+    const project = await this.database.db.selectFrom('capere.seo_projects').select(['id','site_url']).where('organization_id','=',organizationId).where('id','=',projectId).executeTakeFirst();
     if (!project) throw AppException.notFound(ErrorCode.NOT_FOUND, 'SEO project not found');
     let domain = dto.domain.trim().toLowerCase();
     try { domain = new URL(domain.includes('://') ? domain : `https://${domain}`).hostname.toLowerCase().replace(/^www\./,'').replace(/\.$/,''); } catch { throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'Enter a valid competitor website'); }
     if (!domain || domain.includes(' ')) throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'Enter a valid competitor website');
     const existing = await this.database.db.selectFrom('capere.competitors').select('id').where('organization_id','=',organizationId).where('seo_project_id','=',projectId).where('domain','=',domain).executeTakeFirst();
     const count = await this.database.db.selectFrom('capere.competitors').select((eb) => eb.fn.countAll<number>().as('count')).where('organization_id','=',organizationId).where('seo_project_id','=',projectId).executeTakeFirstOrThrow();
-    if (!existing && Number(count.count) >= 10) throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'You can compare up to 10 businesses per website');
+    if (!existing && Number(count.count) >= 4) throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'You can compare up to 4 businesses per website');
     const competitor = await this.database.db.insertInto('capere.competitors').values({ organization_id: organizationId, seo_project_id: projectId, domain, name: dto.name.trim(), metrics: JSON.stringify({ status: 'configured', message: 'Comparison data will appear after the next refresh.' }), last_checked_at: null }).onConflict((c)=>c.columns(['organization_id','seo_project_id','domain']).doUpdateSet({name:dto.name.trim(),updated_at:new Date()})).returningAll().executeTakeFirstOrThrow();
-    await this.database.db.insertInto('capere.scheduled_jobs').values({ organization_id: organizationId, job_type: 'dataforseo-competitor-refresh', name: `dataforseo-competitors:${projectId}`, schedule: 'weekly', enabled: true, next_run_at: new Date(Date.now() + 7 * 86_400_000), payload: JSON.stringify({ projectId }) }).onConflict((oc) => oc.columns(['organization_id','name']).doUpdateSet({ enabled: true, payload: JSON.stringify({ projectId }) })).execute();
-    await this.refreshCompetitors(organizationId, projectId);
+    const target = new URL(project.site_url).hostname.toLowerCase().replace(/^www\./, '');
+    const recent = await this.latestCompetitorRefresh(organizationId, projectId, target);
+    const eligibleAt = recent ? new Date(new Date(recent.updated_at).getTime() + 24 * 3_600_000) : new Date(Date.now() + 2 * 60_000);
+    await this.database.db.insertInto('capere.scheduled_jobs').values({ organization_id: organizationId, job_type: 'dataforseo-competitor-refresh', name: `dataforseo-competitors:${projectId}`, schedule: 'daily', enabled: true, next_run_at: eligibleAt, payload: JSON.stringify({ projectId }) }).onConflict((oc) => oc.columns(['organization_id','name']).doUpdateSet({ enabled: true, schedule:'daily', next_run_at:eligibleAt, payload: JSON.stringify({ projectId }) })).execute();
     return this.database.db.selectFrom('capere.competitors').selectAll().where('organization_id','=',organizationId).where('id','=',competitor.id).executeTakeFirstOrThrow();
   }
 
   async refreshCompetitors(organizationId: string, projectId: string) {
     const project = await this.database.db.selectFrom('capere.seo_projects').selectAll().where('organization_id','=',organizationId).where('id','=',projectId).executeTakeFirst();
     if (!project) throw AppException.notFound(ErrorCode.NOT_FOUND, 'SEO project not found');
-    const competitors = await this.database.db.selectFrom('capere.competitors').selectAll().where('organization_id','=',organizationId).where('seo_project_id','=',projectId).orderBy('created_at').limit(10).execute();
+    const competitors = await this.database.db.selectFrom('capere.competitors').selectAll().where('organization_id','=',organizationId).where('seo_project_id','=',projectId).orderBy('created_at').limit(4).execute();
     if (!competitors.length) return { refreshed: 0, message: 'Add at least one competitor before refreshing comparisons.' };
-    const cooldown = Date.now() - 6 * 3_600_000;
-    if (competitors.every((competitor) => competitor.last_checked_at && new Date(competitor.last_checked_at).getTime() >= cooldown)) return { refreshed: 0, cached: true, message: 'Comparison data is already current.' };
     const target = new URL(project.site_url).hostname.toLowerCase().replace(/^www\./, '');
+    const recent = await this.latestCompetitorRefresh(organizationId, projectId, target);
+    const nextEligibleAt = recent ? new Date(new Date(recent.updated_at).getTime() + 24 * 3_600_000) : null;
+    if (nextEligibleAt && nextEligibleAt.getTime() > Date.now()) return { refreshed: 0, cached: true, nextEligibleAt: nextEligibleAt.toISOString(), message: `Comparison data can be refreshed again after ${nextEligibleAt.toISOString()}.` };
     const request = { targets: [target, ...competitors.map((c) => c.domain)], location_code: project.target_location_code, language_code: project.language_code };
     const fingerprint = createHash('sha256').update(JSON.stringify(request)).digest('hex');
     const integration = await this.ensurePlatformIntegration(organizationId);
@@ -130,7 +146,7 @@ export class DataForSeoService {
     const detailCost = [...(overviewResponse.tasks ?? []), ...(keywordResponse.tasks ?? [])].reduce((sum, row) => sum + Number(row.cost ?? 0), 0);
     const checkedAt = new Date();
     await this.database.transaction(async (trx) => {
-      await trx.insertInto('capere.provider_tasks').values({ organization_id: organizationId, integration_id: integration.id, provider: 'data_for_seo', task_type: 'competitor_bulk_traffic', request_fingerprint: fingerprint, provider_task_id: task?.id ?? null, status: 'succeeded', request: JSON.stringify(request), result: JSON.stringify(result), cost_micro_usd: String(Math.round((task?.cost ?? 0) * 1_000_000)), attempts: 1, next_poll_at: null, error: null }).onConflict((oc) => oc.columns(['organization_id','provider','task_type','request_fingerprint']).doUpdateSet({ result: JSON.stringify(result), status: 'succeeded', cost_micro_usd: String(Math.round((task?.cost ?? 0) * 1_000_000)), updated_at: new Date() })).execute();
+      await trx.insertInto('capere.provider_tasks').values({ organization_id: organizationId, integration_id: integration.id, provider: 'data_for_seo', task_type: 'competitor_bulk_traffic', request_fingerprint: fingerprint, provider_task_id: task?.id ?? null, status: 'succeeded', request: JSON.stringify({ ...request, projectId }), result: JSON.stringify(result), cost_micro_usd: String(Math.round((task?.cost ?? 0) * 1_000_000)), attempts: 1, next_poll_at: null, error: null }).onConflict((oc) => oc.columns(['organization_id','provider','task_type','request_fingerprint']).doUpdateSet({ request: JSON.stringify({ ...request, projectId }), result: JSON.stringify(result), status: 'succeeded', cost_micro_usd: String(Math.round((task?.cost ?? 0) * 1_000_000)), updated_at: new Date() })).execute();
       if (detailRequests.length) await trx.insertInto('capere.provider_tasks').values({ organization_id: organizationId, integration_id: integration.id, provider: 'data_for_seo', task_type: 'competitor_rank_details', request_fingerprint: createHash('sha256').update(JSON.stringify(detailRequests)).digest('hex'), provider_task_id: overviewResponse.tasks?.[0]?.id ?? null, status: 'succeeded', request: JSON.stringify(detailRequests), result: JSON.stringify({ overview: overviewResponse.tasks, keywords: keywordResponse.tasks }), cost_micro_usd: String(Math.round(detailCost * 1_000_000)), attempts: 1, next_poll_at: null, error: null }).onConflict((oc) => oc.columns(['organization_id','provider','task_type','request_fingerprint']).doUpdateSet({ result: JSON.stringify({ overview: overviewResponse.tasks, keywords: keywordResponse.tasks }), status: 'succeeded', cost_micro_usd: String(Math.round(detailCost * 1_000_000)), updated_at: new Date() })).execute();
       for (const competitor of competitors) {
         const item = byTarget.get(competitor.domain);
