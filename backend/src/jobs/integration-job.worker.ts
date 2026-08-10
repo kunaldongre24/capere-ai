@@ -16,6 +16,7 @@ type IntegrationJob =
     }
   | { kind: 'dataforseo-audit-poll'; organizationId: string; taskId: string }
   | { kind: 'dataforseo-audit-submit'; organizationId: string; projectId: string; maxCrawlPages: number }
+  | { kind: 'dataforseo-competitor-refresh'; organizationId: string; projectId: string }
   | { kind: 'github-change-execute'; organizationId: string; requestId: string };
 
 @Injectable()
@@ -64,6 +65,8 @@ export class IntegrationJobWorker {
       return this.dataForSeo.submitAudit(job.data.organizationId, job.data.projectId, {
         maxCrawlPages: Math.min(job.data.maxCrawlPages, 20),
       });
+    if (job.data.kind === 'dataforseo-competitor-refresh')
+      return this.dataForSeo.refreshCompetitors(job.data.organizationId, job.data.projectId);
     return this.github.executeApproved(job.data.organizationId, job.data.requestId);
   }
 }

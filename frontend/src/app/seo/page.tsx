@@ -273,6 +273,7 @@ export default async function SeoPage({
     domain: string;
     name: string | null;
     last_checked_at: string | null;
+    metrics?: { status?: string; organicTraffic?: number; rankingKeywords?: number; targetOrganicTraffic?: number; targetRankingKeywords?: number; locationCode?: number };
   }>;
   const integrations = (Array.isArray(d.integrations) ? d.integrations : []) as Integration[];
   const recs = (Array.isArray(d.recommendations) ? d.recommendations : []) as Array<{
@@ -514,10 +515,8 @@ export default async function SeoPage({
                 }}
               >
                 <strong>{c.name ?? c.domain}</strong>
-                <span>
-                  {c.last_checked_at
-                    ? `Checked ${new Date(c.last_checked_at).toLocaleDateString()}`
-                    : 'Waiting for first comparison'}
+                <span className="competitor-metrics">
+                  {c.metrics?.status === 'ready' ? <><strong>{Math.round(c.metrics.organicTraffic ?? 0).toLocaleString()}</strong> estimated visits · <strong>{Math.round(c.metrics.rankingKeywords ?? 0).toLocaleString()}</strong> ranking terms · {c.metrics.targetOrganicTraffic && (c.metrics.organicTraffic ?? 0) > c.metrics.targetOrganicTraffic ? 'Ahead of your site' : 'Opportunity to catch up'}</> : c.last_checked_at ? `Checked ${new Date(c.last_checked_at).toLocaleDateString()}` : 'Waiting for first comparison'}
                 </span>
               </div>
             ))

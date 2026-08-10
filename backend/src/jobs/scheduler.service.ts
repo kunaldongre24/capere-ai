@@ -339,6 +339,14 @@ export class SchedulerService {
       );
       return { queuedJobId: job.id };
     }
+    if (jobType === 'dataforseo-competitor-refresh') {
+      if (!organizationId) throw new Error('dataforseo-competitor-refresh requires an organization');
+      const projectId = this.objectPayload(payload)['projectId'];
+      if (typeof projectId !== 'string') throw new Error('dataforseo-competitor-refresh requires payload.projectId');
+      if (!this.queues) throw new Error('Queue registry is unavailable');
+      const job = await this.queues.get('integration-sync').add('dataforseo-competitor-refresh', { kind: 'dataforseo-competitor-refresh', organizationId, projectId }, { jobId: `dataforseo-competitor-refresh-${organizationId}-${projectId}-${Date.now()}` });
+      return { queuedJobId: job.id };
+    }
     if (jobType === 'github-change-execute') {
       if (!organizationId) throw new Error('github-change-execute requires an organization');
       const value = this.objectPayload(payload);

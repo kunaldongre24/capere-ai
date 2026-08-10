@@ -54,7 +54,47 @@ export class DataForSeoService {
     let domain = dto.domain.trim().toLowerCase();
     try { domain = new URL(domain.includes('://') ? domain : `https://${domain}`).hostname.toLowerCase().replace(/^www\./,'').replace(/\.$/,''); } catch { throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'Enter a valid competitor website'); }
     if (!domain || domain.includes(' ')) throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'Enter a valid competitor website');
-    return this.database.db.insertInto('capere.competitors').values({ organization_id: organizationId, seo_project_id: projectId, domain, name: dto.name.trim(), metrics: JSON.stringify({ status: 'configured', message: 'Comparison data will appear after the next refresh.' }), last_checked_at: null }).onConflict((c)=>c.columns(['organization_id','seo_project_id','domain']).doUpdateSet({name:dto.name.trim(),updated_at:new Date()})).returningAll().executeTakeFirstOrThrow();
+    const existing = await this.database.db.selectFrom('capere.competitors').select('id').where('organization_id','=',organizationId).where('seo_project_id','=',projectId).where('domain','=',domain).executeTakeFirst();
+    const count = await this.database.db.selectFrom('capere.competitors').select((eb) => eb.fn.countAll<number>().as('count')).where('organization_id','=',organizationId).where('seo_project_id','=',projectId).executeTakeFirstOrThrow();
+    if (!existing && Number(count.count) >= 10) throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'You can compare up to 10 businesses per website');
+    const competitor = await this.database.db.insertInto('capere.competitors').values({ organization_id: organizationId, seo_project_id: projectId, domain, name: dto.name.trim(), metrics: JSON.stringify({ status: 'configured', message: 'Comparison data will appear after the next refresh.' }), last_checked_at: null }).onConflict((c)=>c.columns(['organization_id','seo_project_id','domain']).doUpdateSet({name:dto.name.trim(),updated_at:new Date()})).returningAll().executeTakeFirstOrThrow();
+    await this.database.db.insertInto('capere.scheduled_jobs').values({ organization_id: organizationId, job_type: 'dataforseo-competitor-refresh', name: `dataforseo-competitors:${projectId}`, schedule: 'weekly', enabled: true, next_run_at: new Date(Date.now() + 7 * 86_400_000), payload: JSON.stringify({ projectId }) }).onConflict((oc) => oc.columns(['organization_id','name']).doUpdateSet({ enabled: true, payload: JSON.stringify({ projectId }) })).execute();
+    await this.refreshCompetitors(organizationId, projectId);
+    return this.database.db.selectFrom('capere.competitors').selectAll().where('organization_id','=',organizationId).where('id','=',competitor.id).executeTakeFirstOrThrow();
+  }
+
+  async refreshCompetitors(organizationId: string, projectId: string) {
+    const project = await this.database.db.selectFrom('capere.seo_projects').selectAll().where('organization_id','=',organizationId).where('id','=',projectId).executeTakeFirst();
+    if (!project) throw AppException.notFound(ErrorCode.NOT_FOUND, 'SEO project not found');
+    const competitors = await this.database.db.selectFrom('capere.competitors').selectAll().where('organization_id','=',organizationId).where('seo_project_id','=',projectId).orderBy('created_at').limit(10).execute();
+    if (!competitors.length) return { refreshed: 0, message: 'Add at least one competitor before refreshing comparisons.' };
+    const cooldown = Date.now() - 6 * 3_600_000;
+    if (competitors.every((competitor) => competitor.last_checked_at && new Date(competitor.last_checked_at).getTime() >= cooldown)) return { refreshed: 0, cached: true, message: 'Comparison data is already current.' };
+    const target = new URL(project.site_url).hostname.toLowerCase().replace(/^www\./, '');
+    const request = { targets: [target, ...competitors.map((c) => c.domain)], location_code: project.target_location_code, language_code: project.language_code };
+    const fingerprint = createHash('sha256').update(JSON.stringify(request)).digest('hex');
+    const integration = await this.ensurePlatformIntegration(organizationId);
+    const response = await this.adapter.postTask<Record<string, unknown>>('dataforseo_labs/google/bulk_traffic_estimation/live', request);
+    const task = response.tasks?.[0];
+    const result = task?.result?.[0] as {
+      items?: Array<{
+        target?: string;
+        metrics?: Record<string, { etv?: number; count?: number } | null>;
+      }>;
+    } | undefined;
+    if (!result?.items) throw AppException.serviceUnavailable(ErrorCode.INTEGRATION_ERROR, 'DataForSEO did not return competitor data');
+    const byTarget = new Map(result.items.map((item) => [String(item.target ?? '').replace(/^www\./, ''), item]));
+    const targetItem = byTarget.get(target);
+    await this.database.transaction(async (trx) => {
+      await trx.insertInto('capere.provider_tasks').values({ organization_id: organizationId, integration_id: integration.id, provider: 'data_for_seo', task_type: 'competitor_bulk_traffic', request_fingerprint: fingerprint, provider_task_id: task?.id ?? null, status: 'succeeded', request: JSON.stringify(request), result: JSON.stringify(result), cost_micro_usd: String(Math.round((task?.cost ?? 0) * 1_000_000)), attempts: 1, next_poll_at: null, error: null }).onConflict((oc) => oc.columns(['organization_id','provider','task_type','request_fingerprint']).doUpdateSet({ result: JSON.stringify(result), status: 'succeeded', cost_micro_usd: String(Math.round((task?.cost ?? 0) * 1_000_000)), updated_at: new Date() })).execute();
+      for (const competitor of competitors) {
+        const item = byTarget.get(competitor.domain);
+        const organic = item?.metrics?.organic ?? { etv: 0, count: 0 };
+        const paid = item?.metrics?.paid ?? { etv: 0, count: 0 };
+        await trx.updateTable('capere.competitors').set({ metrics: JSON.stringify({ status: item ? 'ready' : 'no_data', organicTraffic: Number(organic?.etv ?? 0), rankingKeywords: Number(organic?.count ?? 0), paidTraffic: Number(paid?.etv ?? 0), paidKeywords: Number(paid?.count ?? 0), targetOrganicTraffic: Number(targetItem?.metrics?.organic?.etv ?? 0), targetRankingKeywords: Number(targetItem?.metrics?.organic?.count ?? 0), locationCode: project.target_location_code, languageCode: project.language_code }), last_checked_at: new Date(), updated_at: new Date() }).where('organization_id','=',organizationId).where('id','=',competitor.id).execute();
+      }
+    });
+    return { refreshed: competitors.length, cost: task?.cost ?? 0, checkedAt: new Date().toISOString() };
   }
 
   async removeCompetitor(organizationId: string, projectId: string, competitorId: string) {

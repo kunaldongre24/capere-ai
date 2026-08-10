@@ -28,6 +28,11 @@ export class DataForSeoController {
   addCompetitor(@CurrentOrg() org: string, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateCompetitorDto) {
     return this.service.addCompetitor(org, id, dto);
   }
+  @Post('projects/:id/competitors/refresh')
+  @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
+  refreshCompetitors(@CurrentOrg() org: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.refreshCompetitors(org, id);
+  }
   @Delete('projects/:id/competitors/:competitorId')
   @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
   removeCompetitor(@CurrentOrg() org: string, @Param('id', ParseUUIDPipe) id: string, @Param('competitorId', ParseUUIDPipe) competitorId: string) {
