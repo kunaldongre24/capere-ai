@@ -104,7 +104,7 @@ export class DataForSeoService {
     const target = new URL(project.site_url).hostname.toLowerCase().replace(/^www\./, '');
     const recent = await this.latestCompetitorRefresh(organizationId, projectId, target);
     const nextEligibleAt = recent ? new Date(new Date(recent.updated_at).getTime() + 24 * 3_600_000) : null;
-    if (nextEligibleAt && nextEligibleAt.getTime() > Date.now()) return { refreshed: 0, cached: true, nextEligibleAt: nextEligibleAt.toISOString(), message: `Comparison data can be refreshed again after ${nextEligibleAt.toISOString()}.` };
+    if (nextEligibleAt && nextEligibleAt.getTime() > Date.now()) return { refreshed: 0, cached: true, nextEligibleAt: nextEligibleAt.toISOString(), message: 'Your comparison was refreshed within the last 24 hours.' };
     const request = { targets: [target, ...competitors.map((c) => c.domain)], location_code: project.target_location_code, language_code: project.language_code };
     const fingerprint = createHash('sha256').update(JSON.stringify(request)).digest('hex');
     const integration = await this.ensurePlatformIntegration(organizationId);
