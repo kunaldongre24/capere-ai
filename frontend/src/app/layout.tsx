@@ -1,4 +1,5 @@
 import './globals.css';
+import './ask-cmo.css';
 import { AppChrome } from '@/components/app-chrome';
 
 export const metadata = { title: 'Capere AI', description: 'AI Growth Operating System for CPA firms' };

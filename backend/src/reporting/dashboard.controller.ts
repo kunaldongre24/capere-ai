@@ -1,11 +1,14 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { CurrentOrg, Roles } from '../auth';
+import { CurrentOrg, CurrentOrgRole, CurrentUser, Roles } from '../auth';
+import { GenerateChatResponseUseCase } from '../intelligence';
+import { MemoryService } from '../intelligence/memory/memory.service';
 import { AppException, ErrorCode } from '../shared/http';
+import type { OrgRole } from '../shared/database';
 import { DashboardService } from './dashboard.service';
 import { ContentGenerationService } from './content-generation.service';
 import type { DashboardKind } from '../shared/database';
-import { GenerateContentDraftDto } from './reporting.dto';
+import { AskCmoDto, GenerateContentDraftDto } from './reporting.dto';
 
 @ApiTags('command-centers')
 @ApiBearerAuth('supabase-jwt')
@@ -14,6 +17,8 @@ export class DashboardController {
   constructor(
     private readonly dashboards: DashboardService,
     private readonly content: ContentGenerationService,
+    private readonly intelligence: GenerateChatResponseUseCase,
+    private readonly memory: MemoryService,
   ) {}
 
   @Get()
@@ -38,6 +43,58 @@ export class DashboardController {
   @Roles('owner', 'office_manager', 'marketing_manager', 'capere_admin')
   cmoSummary(@CurrentOrg() organizationId: string) {
     return this.dashboards.cmoSummary(organizationId);
+  }
+
+  @Get('ai-cmo/conversations')
+  @Roles('owner', 'office_manager', 'marketing_manager', 'capere_admin')
+  cmoConversations(
+    @CurrentOrg() organizationId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.memory.listSessions({ organizationId, userId, agent: 'cmo' });
+  }
+
+  @Get('ai-cmo/conversations/:sessionId')
+  @Roles('owner', 'office_manager', 'marketing_manager', 'capere_admin')
+  cmoConversation(
+    @CurrentOrg() organizationId: string,
+    @CurrentUser('id') userId: string,
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+  ) {
+    return this.memory.sessionConversation({ organizationId, userId, sessionId });
+  }
+
+  @Post('ai-cmo/ask')
+  @Roles('owner', 'office_manager', 'marketing_manager', 'capere_admin')
+  async askCmo(
+    @CurrentOrg() organizationId: string,
+    @CurrentUser('id') userId: string,
+    @CurrentOrgRole() role: OrgRole,
+    @Body() dto: AskCmoDto,
+  ) {
+    const result = await this.intelligence.execute({
+      organizationId,
+      userId,
+      sessionOwnerId: userId,
+      role,
+      capability: 'cmo',
+      message: dto.message,
+      sessionId: dto.sessionId,
+      ephemeral: false,
+      maxTokens: 1_200,
+    });
+    const sourceLabels: Record<string, string> = {
+      get_ga4_summary: 'Website analytics',
+      get_gsc_summary: 'Google Search Console',
+      get_ghl_pipeline_summary: 'GoHighLevel pipeline',
+      get_seo_project_summary: 'SEO audit',
+      get_gbp_summary: 'Google Business Profile',
+    };
+    return {
+      sessionId: result.sessionId,
+      message: result.content,
+      sources: [...new Set(result.toolResults.filter((tool) => tool.ok).map((tool) => sourceLabels[tool.toolName] ?? tool.toolName))],
+    };
   }
 
   @Get('seo-command-center/summary')

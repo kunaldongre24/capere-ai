@@ -1,5 +1,6 @@
 import { EmbeddedModule } from '@/components/embedded-module';
 import { CmoTaskQueue } from '@/components/cmo-task-queue';
+import { AskCmoChat } from '@/components/ask-cmo-chat';
 import { capereFetch, type Envelope } from '@/lib/api';
 
 const sections = [
@@ -327,30 +328,7 @@ export default async function CmoPage({
   else if (view === 'ask')
     content = (
       <div className="cmo-layout">
-        <div className="card cmo-ask">
-          <div className="cmo-ask-icon">C</div>
-          <div>
-            <div className="eyebrow">AI CMO assistant</div>
-            <h2>Ask questions about your business data</h2>
-            <p>
-              Use the assistant to understand performance, explore opportunities, and turn evidence
-              into a practical next step. Your organization context is attached securely.
-            </p>
-            <div className="cmo-prompts">
-              <span>What should we focus on this week?</span>
-              <span>Where are we losing growth opportunities?</span>
-              <span>Explain our latest search performance.</span>
-            </div>
-            <a
-              className="btn"
-              href={process.env.NEXT_PUBLIC_CHAT_URL ?? 'https://chat.capereai.com'}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open Ask CMO
-            </a>
-          </div>
-        </div>
+        <AskCmoChat />
       </div>
     );
   else {

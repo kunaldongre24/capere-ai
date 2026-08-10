@@ -109,6 +109,52 @@ export class MemoryService implements ConversationMemory, BusinessMemory {
     }));
   }
 
+  async listSessions(params: {
+    organizationId: string;
+    userId: string;
+    agent: string;
+    limit?: number;
+  }) {
+    return this.database.db
+      .selectFrom('capere.ai_sessions')
+      .select(['id', 'title', 'last_message_at', 'created_at'])
+      .where('organization_id', '=', params.organizationId)
+      .where('user_id', '=', params.userId)
+      .where('agent', '=', params.agent as never)
+      .where('status', '=', 'active')
+      .orderBy('last_message_at', 'desc')
+      .orderBy('created_at', 'desc')
+      .limit(Math.min(params.limit ?? 12, 30))
+      .execute();
+  }
+
+  async sessionConversation(params: {
+    organizationId: string;
+    userId: string;
+    sessionId: string;
+  }) {
+    await this.assertSessionAccess({
+      organizationId: params.organizationId,
+      sessionId: params.sessionId,
+      userId: params.userId,
+    });
+    const session = await this.database.db
+      .selectFrom('capere.ai_sessions')
+      .select(['id', 'title', 'last_message_at', 'created_at'])
+      .where('organization_id', '=', params.organizationId)
+      .where('user_id', '=', params.userId)
+      .where('id', '=', params.sessionId)
+      .executeTakeFirstOrThrow();
+    const messages = (await this.recent(params.organizationId, params.sessionId, 80))
+      .filter((message) => message.role === 'user' || message.role === 'assistant')
+      .map((message) => ({
+        role: message.role,
+        content: message.content,
+        createdAt: message.createdAt,
+      }));
+    return { ...session, messages };
+  }
+
   async assertSessionAccess(params: {
     organizationId: string;
     sessionId: string;
