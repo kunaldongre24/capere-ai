@@ -45,9 +45,6 @@ export function EmptyState({
 }) {
   return (
     <div className="card empty-state">
-      <div className="empty-state-icon" aria-hidden>
-        ◇
-      </div>
       <h3 className="card-title">{title}</h3>
       <p className="muted">{body}</p>
       <span className="badge">{badge}</span>

@@ -95,7 +95,6 @@ const Section = ({
 );
 const State = ({ title, body }: { title: string; body: string }) => (
   <div className="cmo-empty">
-    <span aria-hidden>◇</span>
     <div>
       <strong>{title}</strong>
       <p>{body}</p>

@@ -28,41 +28,23 @@ type Integration = {
   last_sync_at: string | null;
   last_error: string | null;
 };
+const websiteDomain = (value?: string) => {
+  if (!value) return 'Your website';
+  try { return new URL(value.includes('://') ? value : `https://${value}`).hostname.replace(/^www\./, ''); } catch { return value; }
+};
 
-const Icon = ({ name }: { name: string }) => (
-  <span className={`seo-icon seo-icon-${name}`} aria-hidden>
-    {(
-      {
-        clicks: '↗',
-        impressions: '◉',
-        position: '⌖',
-        health: '✓',
-        audit: '⌕',
-        keywords: '⌨',
-        competitors: '◎',
-        gbp: '★',
-        recommendations: '✦',
-        history: '◷',
-      } as Record<string, string>
-    )[name] ?? '•'}
-  </span>
-);
 const Card = ({
   title,
   value,
   detail,
-  icon,
 }: {
   title: string;
   value: string;
   detail: string;
-  icon: string;
+  icon?: string;
 }) => (
   <div className="card seo-metric-card">
-    <div className="seo-card-top">
-      <div className="metric-label">{title}</div>
-      <Icon name={icon} />
-    </div>
+    <div className="metric-label">{title}</div>
     <div className="seo-metric-value">{value}</div>
     <p className="seo-metric-detail">{detail}</p>
   </div>
@@ -102,15 +84,6 @@ const Panel = ({
 }) => (
   <div className="card seo-panel">
     <div className="seo-panel-header">
-      <Icon
-        name={
-          title.toLowerCase().includes('keyword')
-            ? 'keywords'
-            : title.toLowerCase().includes('technical')
-              ? 'audit'
-              : 'recommendations'
-        }
-      />
       <div>
         <h3>{title}</h3>
         <p>{subtitle}</p>
@@ -275,6 +248,9 @@ export default async function SeoPage({
     last_checked_at: string | null;
     metrics?: { status?: string; organicTraffic?: number; rankingKeywords?: number; targetOrganicTraffic?: number; targetRankingKeywords?: number; locationCode?: number };
   }>;
+  const project = (d.project && typeof d.project === 'object' ? d.project : null) as { id:string; name:string; site_url:string } | null;
+  const targetMetrics = competitors.find((c) => c.metrics?.status === 'ready')?.metrics;
+  const targetDomain = websiteDomain(project?.site_url);
   const integrations = (Array.isArray(d.integrations) ? d.integrations : []) as Integration[];
   const recs = (Array.isArray(d.recommendations) ? d.recommendations : []) as Array<{
     id: string;
@@ -478,7 +454,7 @@ export default async function SeoPage({
   } else if (view === 'competitors')
     content = (
       <div className="grid">
-        <CompetitorControls projectId={typeof d.project==='object'&&d.project&&'id' in d.project?String((d.project as {id:string}).id):undefined}/>
+        <CompetitorControls projectId={project?.id}/>
         <div className="grid grid-3">
           <Card
             title="Competitors added"
@@ -487,39 +463,27 @@ export default async function SeoPage({
             icon="competitors"
           />
           <Card
-            title="Your average ranking"
-            value={position}
-            detail="Current Google position"
-            icon="position"
+            title="Your ranking search terms"
+            value={Math.round(targetMetrics?.targetRankingKeywords ?? 0).toLocaleString()}
+            detail={targetDomain}
+            icon="keywords"
           />
           <Card
             title="Comparison status"
-            value={competitors.length ? 'Ready' : 'Not set up'}
-            detail="Add businesses you want to compare"
+            value={competitors.some((c) => c.metrics?.status === 'ready') ? 'Current' : competitors.length ? 'Preparing' : 'Not set up'}
+            detail={competitors[0]?.last_checked_at ? `Updated ${new Date(competitors[0].last_checked_at).toLocaleDateString()}` : 'Add businesses you want to compare'}
             icon="audit"
           />
         </div>
         <Panel
-          title="Competitor comparison"
-          subtitle="See how your business compares with similar businesses in search."
+          title="Side-by-side search comparison"
+          subtitle="Compare how often each website is found through unpaid Google search results."
         >
           {competitors.length ? (
-            competitors.map((c) => (
-              <div
-                key={c.domain}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '12px 0',
-                  borderBottom: '1px solid var(--border)',
-                }}
-              >
-                <strong>{c.name ?? c.domain}</strong>
-                <span className="competitor-metrics">
-                  {c.metrics?.status === 'ready' ? <><strong>{Math.round(c.metrics.organicTraffic ?? 0).toLocaleString()}</strong> estimated visits · <strong>{Math.round(c.metrics.rankingKeywords ?? 0).toLocaleString()}</strong> ranking terms · {c.metrics.targetOrganicTraffic && (c.metrics.organicTraffic ?? 0) > c.metrics.targetOrganicTraffic ? 'Ahead of your site' : 'Opportunity to catch up'}</> : c.last_checked_at ? `Checked ${new Date(c.last_checked_at).toLocaleDateString()}` : 'Waiting for first comparison'}
-                </span>
-              </div>
-            ))
+            <div className="comparison-table-wrap"><table className="comparison-table"><thead><tr><th>Measure</th><th><strong>{project?.name ?? 'Your business'}</strong><small>{targetDomain}</small></th>{competitors.map((c)=><th key={c.domain}><strong>{c.name ?? c.domain}</strong><small>{c.domain}</small></th>)}</tr></thead><tbody>{[
+              {label:'Estimated organic visits',detail:'Potential monthly visits from unpaid search',target:Number(targetMetrics?.targetOrganicTraffic??0),value:(c:typeof competitors[number])=>Number(c.metrics?.organicTraffic??0)},
+              {label:'Ranking search terms',detail:'Search phrases where the website appears',target:Number(targetMetrics?.targetRankingKeywords??0),value:(c:typeof competitors[number])=>Number(c.metrics?.rankingKeywords??0)},
+            ].map((metric)=>{const values=[metric.target,...competitors.map(metric.value)];const maximum=Math.max(...values);return <tr key={metric.label}><th><strong>{metric.label}</strong><small>{metric.detail}</small></th>{values.map((value,index)=>{const ready=index===0||competitors[index-1]?.metrics?.status==='ready';const tone=!ready||maximum===0?'neutral':value===maximum?'good':'bad';const gap=maximum-value;return <td className={`comparison-${tone}`} key={index}><strong>{ready?Math.round(value).toLocaleString():'—'}</strong><small>{!ready?'Waiting for data':maximum===0?'No visibility recorded':gap===0?'Strongest result':`${Math.round(gap).toLocaleString()} behind leader`}</small></td>})}</tr>})}</tbody></table></div>
           ) : (
             <p>
               Your website review is active, but no comparison businesses have been added. Add a few
