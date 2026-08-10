@@ -1,18 +1,21 @@
-# GoHighLevel custom menus
+# GoHighLevel custom pages and SSO
 
-Capere exposes two iframe entry points for the GoHighLevel Marketplace app:
+Capere exposes two iframe entry points for the GoHighLevel app:
 
 | Menu label | URL |
 | --- | --- |
-| SEO Command Center | `https://app.capereai.com/embed/seo` |
-| AI CMO | `https://app.capereai.com/embed/cmo` |
+| Search Visibility | `https://app.capereai.com/embed/seo` |
+| Marketing Advisor | `https://app.capereai.com/embed/cmo` |
 
-## Marketplace configuration
+## Private app configuration
 
-In the GoHighLevel Marketplace developer portal, open the Capere app and add
-two Custom Menu Links. Configure each link for sub-account/location users,
-select the option to open the page inside GoHighLevel, and use the labels and
-URLs above. Publish the updated app version after both links are saved.
+Use a private Marketplace app configuration (the app does not need to be
+publicly listed). In Advanced Settings → Auth, generate the app's Shared
+Secret and set the same value as `GHL_SSO_KEY` in the Capere backend.
+
+Add two Custom Pages for the sub-account left navigation. Configure each page
+as an iframe and use the labels and URLs above. Publish the app version and
+install/update it in the target locations.
 
 The routes explicitly allow framing from GoHighLevel and LeadConnector. They
 do not accept an organization or location from an unsigned URL parameter.
@@ -21,12 +24,12 @@ backend organization guards.
 
 ## Authentication behavior
 
-If the browser already has a valid Capere session, the menu opens immediately.
-Otherwise it shows the Capere sign-in screen once and returns the user to the
-requested embedded menu after successful authentication.
+The embedded page requests the authenticated GHL user context from its parent,
+posts the encrypted context to Capere, and receives a one-time Capere session.
+No Capere password form is used. Capere verifies the active GHL location before
+creating or reusing the user's organization membership.
 
-`GHL_SSO_KEY` is reserved for a future verified Marketplace SSO exchange. Do
-not treat a plain `locationId` query parameter as authentication and do not
+Do not treat a plain `locationId` query parameter as authentication and do not
 bypass Capere membership checks for an iframe request.
 
 ## Verification

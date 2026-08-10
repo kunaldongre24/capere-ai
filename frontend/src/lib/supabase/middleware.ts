@@ -4,16 +4,19 @@ import type { CookieOptions } from '@supabase/ssr';
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
+const iframeCookieOptions = (options: CookieOptions): CookieOptions =>
+  process.env.NODE_ENV === 'production' ? { ...options, sameSite: 'none', secure: true } : options;
+
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
   const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     cookies: {
       getAll: () => request.cookies.getAll(),
-      setAll: (values: CookieToSet[]) => { values.forEach(({name,value}) => request.cookies.set(name,value)); response=NextResponse.next({request}); values.forEach(({name,value,options})=>response.cookies.set(name,value,options)); },
+      setAll: (values: CookieToSet[]) => { values.forEach(({name,value}) => request.cookies.set(name,value)); response=NextResponse.next({request}); values.forEach(({name,value,options})=>response.cookies.set(name,value,iframeCookieOptions(options))); },
     },
   });
   const { data: { user } } = await supabase.auth.getUser();
-  const publicPath = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/auth/');
+  const publicPath = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/auth/') || request.nextUrl.pathname.startsWith('/embed/') || request.nextUrl.pathname === '/api/auth/ghl-sso';
   if (!user && !publicPath) {
     const url=request.nextUrl.clone();
     const returnTo=`${request.nextUrl.pathname}${request.nextUrl.search}`;

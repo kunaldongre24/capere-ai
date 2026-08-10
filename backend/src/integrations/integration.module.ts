@@ -4,6 +4,8 @@ import { GhlWebhookController } from './ghl/ghl-webhook.controller';
 import { GhlWebhookService } from './ghl/ghl-webhook.service';
 import { GhlOauthController } from './ghl/ghl-oauth.controller';
 import { GhlOauthService } from './ghl/ghl-oauth.service';
+import { GhlSsoController } from './ghl/ghl-sso.controller';
+import { GhlSsoService } from './ghl/ghl-sso.service';
 import { GhlTokenService } from './ghl/ghl-token.service';
 import { CredentialVaultService } from './credential-vault.service';
 import { DataForSeoAdapter } from './dataforseo/dataforseo.adapter';
@@ -27,6 +29,7 @@ import { IntegrationService } from './integration.service';
     DataForSeoController,
     GhlWebhookController,
     GhlOauthController,
+    GhlSsoController,
     GithubController,
   ],
   providers: [
@@ -35,6 +38,7 @@ import { IntegrationService } from './integration.service';
     GhlAdapter,
     GhlWebhookService,
     GhlOauthService,
+    GhlSsoService,
     GhlTokenService,
     GoogleAdapter,
     GoogleService,
