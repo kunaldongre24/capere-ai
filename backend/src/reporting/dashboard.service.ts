@@ -341,7 +341,7 @@ export class DashboardService {
         .executeTakeFirst(),
       this.database.db.selectFrom('capere.technical_audits').select(['id','status','score','issue_count','started_at','completed_at']).where('organization_id','=',organizationId).orderBy('created_at','desc').limit(10).execute(),
       this.database.db.selectFrom('capere.seo_projects').select(['id','name','site_url','enabled','target_location_code','language_code']).where('organization_id','=',organizationId).where('enabled','=',true).orderBy('created_at','desc').limit(1).executeTakeFirst(),
-      this.database.db.selectFrom('capere.keywords as k').leftJoin('capere.keyword_rankings as r','r.keyword_id','k.id').select(['k.keyword','k.tags','r.rank','r.checked_on','r.url']).where('k.organization_id','=',organizationId).where('k.enabled','=',true).orderBy('r.checked_on','desc').limit(50).execute(),
+      this.database.db.selectFrom('capere.keywords as k').leftJoin('capere.keyword_rankings as r','r.keyword_id','k.id').select(['k.keyword','k.tags','r.rank','r.checked_on','r.url','r.raw_summary']).where('k.organization_id','=',organizationId).where('k.enabled','=',true).orderBy('r.checked_on','desc').limit(50).execute(),
       this.database.db
         .selectFrom('capere.analytics_daily')
         .select(['metric_date', 'dimensions', 'metrics'])

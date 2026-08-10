@@ -1,6 +1,7 @@
 import { EmbeddedModule } from '@/components/embedded-module';
 import { CompetitorControls } from '@/components/competitor-controls';
 import { CompetitorPending } from '@/components/competitor-pending';
+import { KeywordRefresh } from '@/components/keyword-refresh';
 import { capereFetch, Envelope } from '@/lib/api';
 
 const sections = [
@@ -231,9 +232,11 @@ export default async function SeoPage({
   const history = (Array.isArray(d.auditHistory) ? d.auditHistory : []) as Audit[];
   const keywords = (Array.isArray(d.keywords) ? d.keywords : []) as Array<{
     keyword: string;
+    tags?: string[];
     rank: number | null;
     checked_on: string | null;
     url: string | null;
+    raw_summary?: {source?:string;category?:string;searchVolume?:number;difficulty?:number;intent?:string;clicks?:number;impressions?:number;position?:number|null;monthlyTrend?:number};
   }>;
   const searchQueries = (Array.isArray(d.searchQueries) ? d.searchQueries : []) as Array<{
     query: string;
@@ -356,6 +359,9 @@ export default async function SeoPage({
       </div>
     );
   else if (view === 'keywords') {
+    const histories = new Map<string, typeof keywords>();
+    for (const keyword of keywords) histories.set(keyword.keyword,[...(histories.get(keyword.keyword)??[]),keyword]);
+    const enriched = [...histories.values()].map((rows)=>{const latest=rows[0];const previous=rows[1];const movement=latest.rank&&previous?.rank?previous.rank-latest.rank:null;return {...latest,movement};});
     const terms = searchQueries.length
       ? searchQueries
       : keywords.map((k) => ({
@@ -366,13 +372,13 @@ export default async function SeoPage({
           position: k.rank ?? 0,
           latestDate: k.checked_on ?? '',
         }));
-    const maxTermImpressions = Math.max(...terms.map((t) => t.impressions), 1);
     content = (
       <div className="grid">
+        <KeywordRefresh projectId={project?.id}/>
         <div className="grid grid-3">
           <Card
             title="Search terms found"
-            value={String(terms.length)}
+            value={String(enriched.length || terms.length)}
             detail={
               terms.length
                 ? 'Phrases people used to find you'
@@ -393,47 +399,8 @@ export default async function SeoPage({
             icon="impressions"
           />
         </div>
-        <Panel
-          title="How customers found you"
-          subtitle="Search phrases that showed your website in Google during the last 30 days."
-        >
-          {terms.length ? (
-            <div>
-              {terms.map((term, i) => (
-                <div
-                  key={`${term.query}-${i}`}
-                  style={{ padding: '14px 0', borderBottom: '1px solid var(--border)' }}
-                >
-                  <Bar
-                    label={term.query}
-                    value={term.impressions}
-                    max={maxTermImpressions}
-                    detail={`${term.impressions} appearance${term.impressions === 1 ? '' : 's'}`}
-                  />
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 18,
-                      flexWrap: 'wrap',
-                      fontSize: 13,
-                      opacity: 0.78,
-                    }}
-                  >
-                    <span>
-                      <strong>{term.clicks}</strong> website visit{term.clicks === 1 ? '' : 's'}
-                    </span>
-                    <span>
-                      <strong>{term.position ? term.position.toFixed(1) : '—'}</strong> average
-                      ranking
-                    </span>
-                    <span>
-                      <strong>{(term.ctr * 100).toFixed(1)}%</strong> visit rate
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
+        <Panel title="Keyword performance and opportunities" subtitle="A practical view of what is working, what is close to improving, and where new demand exists.">
+          {enriched.length ? <div className="keyword-table-wrap"><table className="keyword-table"><thead><tr><th>Search phrase</th><th>Status</th><th>Monthly demand</th><th>Difficulty</th><th>Customer intent</th><th>Your ranking</th><th>Google activity</th></tr></thead><tbody>{enriched.map((term)=>{const summary=term.raw_summary??{};const category=summary.category??'opportunity';const status=category==='performing'?'Performing well':category==='close_to_page_one'?'Close to page one':category==='needs_improvement'?'Needs improvement':'New opportunity';const difficulty=Number(summary.difficulty??0);const difficultyLabel=difficulty<=30?'Easier':difficulty<=60?'Moderate':'Competitive';const intent=summary.intent==='commercial'?'Comparing options':summary.intent==='transactional'?'Ready to act':summary.intent==='informational'?'Learning or researching':summary.intent==='navigational'?'Looking for a brand':'Intent not identified';return <tr key={term.keyword}><th><strong>{term.keyword}</strong><small>{summary.source==='search_console'?'Found in your Search Console':'Found through competitor research'}</small></th><td><span className={`keyword-status ${category}`}>{status}</span></td><td><strong>{Number(summary.searchVolume??0).toLocaleString()}</strong><small>searches per month</small></td><td><strong>{difficultyLabel}</strong><small>{difficulty}/100</small></td><td>{intent}</td><td><strong>{term.rank?`#${term.rank}`:'Not ranking'}</strong><small>{term.movement===null?'Baseline':term.movement>0?`Improved ${term.movement}`:term.movement<0?`Declined ${Math.abs(term.movement)}`:'No change'}</small></td><td><strong>{Number(summary.impressions??0).toLocaleString()} appearances</strong><small>{Number(summary.clicks??0).toLocaleString()} website visits</small></td></tr>})}</tbody></table></div> : terms.length ? <div className="keyword-basic-list">{terms.map((term)=><div key={term.query}><strong>{term.query}</strong><span>{term.impressions} appearances · ranking {term.position?term.position.toFixed(1):'not available'}</span></div>)}</div> : (
             <p>
               Google Search is connected, but there is not enough activity yet to show individual
               search phrases. Your website has appeared {impressions} time(s), received {clicks}{' '}

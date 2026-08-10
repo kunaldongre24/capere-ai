@@ -33,6 +33,11 @@ export class DataForSeoController {
   refreshCompetitors(@CurrentOrg() org: string, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.refreshCompetitors(org, id);
   }
+  @Post('projects/:id/keywords/refresh')
+  @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
+  refreshKeywords(@CurrentOrg() org: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.refreshKeywords(org, id);
+  }
   @Delete('projects/:id/competitors/:competitorId')
   @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
   removeCompetitor(@CurrentOrg() org: string, @Param('id', ParseUUIDPipe) id: string, @Param('competitorId', ParseUUIDPipe) competitorId: string) {

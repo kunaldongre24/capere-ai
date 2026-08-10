@@ -130,6 +130,35 @@ export class DataForSeoService {
     return { refreshed: competitors.length, cost: Number(task?.cost ?? 0) + detailCost, checkedAt: checkedAt.toISOString() };
   }
 
+  async refreshKeywords(organizationId: string, projectId: string) {
+    const project = await this.database.db.selectFrom('capere.seo_projects').selectAll().where('organization_id','=',organizationId).where('id','=',projectId).executeTakeFirst();
+    if (!project) throw AppException.notFound(ErrorCode.NOT_FOUND, 'SEO project not found');
+    const recent = await this.database.db.selectFrom('capere.provider_tasks').select('updated_at').where('organization_id','=',organizationId).where('provider','=','data_for_seo').where('task_type','=','keyword_overview').orderBy('updated_at','desc').executeTakeFirst();
+    if (recent && new Date(recent.updated_at).getTime() >= Date.now() - 6 * 3_600_000) return { refreshed:0,cached:true,message:'Keyword data is already current.' };
+    const start = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0,10);
+    const [gscRows, competitors] = await Promise.all([
+      this.database.db.selectFrom('capere.analytics_daily').select(['dimensions','metrics']).where('organization_id','=',organizationId).where('provider','=','google_search_console').where('metric_date','>=',start).execute(),
+      this.database.db.selectFrom('capere.competitors').select(['metrics']).where('organization_id','=',organizationId).where('seo_project_id','=',projectId).execute(),
+    ]);
+    const gsc = new Map<string,{clicks:number;impressions:number;weightedPosition:number}>();
+    for (const row of gscRows) { const dimensions=this.object(row.dimensions); const keyword=typeof dimensions['query']==='string'?dimensions['query'].trim().toLowerCase():''; if(!keyword)continue; const metrics=this.object(row.metrics); const impressions=Number(metrics['impressions']??0); const current=gsc.get(keyword)??{clicks:0,impressions:0,weightedPosition:0}; current.clicks+=Number(metrics['clicks']??0); current.impressions+=impressions; current.weightedPosition+=Number(metrics['position']??0)*Math.max(impressions,1); gsc.set(keyword,current); }
+    const competitorTerms: Array<{keyword:string;searchVolume:number}> = [];
+    for (const competitor of competitors) { const metrics=this.object(competitor.metrics); const rows=Array.isArray(metrics['keywordOpportunities'])?metrics['keywordOpportunities']:[]; for(const raw of rows){const row=this.object(raw);const keyword=String(row['keyword']??'').trim().toLowerCase();if(keyword)competitorTerms.push({keyword,searchVolume:Number(row['searchVolume']??0)});} }
+    const gscCandidates=[...gsc.entries()].sort((a,b)=>b[1].impressions-a[1].impressions).map(([keyword])=>keyword);
+    const candidates=[...new Set([...gscCandidates,...competitorTerms.sort((a,b)=>b.searchVolume-a.searchVolume).map((row)=>row.keyword)])].slice(0,20);
+    if(!candidates.length)return {refreshed:0,message:'No Search Console queries or competitor opportunities are available yet.'};
+    const request={keywords:candidates,location_code:project.target_location_code,language_code:project.language_code};
+    const integration=await this.ensurePlatformIntegration(organizationId);
+    const response=await this.adapter.postTask<Record<string,unknown>>('dataforseo_labs/google/keyword_overview/live',request);
+    const task=response.tasks?.[0]; const root=this.object(task?.result?.[0]); const items=Array.isArray(root['items'])?root['items']:[];
+    const checkedOn=new Date().toISOString().slice(0,10); const fingerprint=createHash('sha256').update(JSON.stringify(request)).digest('hex');
+    await this.database.transaction(async(trx)=>{
+      await trx.insertInto('capere.provider_tasks').values({organization_id:organizationId,integration_id:integration.id,provider:'data_for_seo',task_type:'keyword_overview',request_fingerprint:fingerprint,provider_task_id:task?.id??null,status:'succeeded',request:JSON.stringify(request),result:JSON.stringify(root),cost_micro_usd:String(Math.round(Number(task?.cost??0)*1_000_000)),attempts:1,next_poll_at:null,error:null}).onConflict((oc)=>oc.columns(['organization_id','provider','task_type','request_fingerprint']).doUpdateSet({result:JSON.stringify(root),status:'succeeded',cost_micro_usd:String(Math.round(Number(task?.cost??0)*1_000_000)),updated_at:new Date()})).execute();
+      for(const raw of items){const item=this.object(raw);const keyword=String(item['keyword']??'').trim().toLowerCase();if(!keyword)continue;const info=this.object(item['keyword_info']);const properties=this.object(item['keyword_properties']);const intent=this.object(item['search_intent_info']);const observed=gsc.get(keyword);const position=observed?observed.weightedPosition/Math.max(observed.impressions,1):null;const source=observed?'search_console':'competitor_opportunity';const category=position===null?'opportunity':position<=10?'performing':position<=20?'close_to_page_one':'needs_improvement';const summary={source,category,searchVolume:Number(info['search_volume']??0),difficulty:Number(properties['keyword_difficulty']??0),intent:String(intent['main_intent']??'unknown'),competition:String(info['competition_level']??'unknown').toLowerCase(),clicks:observed?.clicks??0,impressions:observed?.impressions??0,position,monthlyTrend:Number(this.object(info['search_volume_trend'])['monthly']??0)};const keywordRow=await trx.insertInto('capere.keywords').values({organization_id:organizationId,seo_project_id:projectId,keyword,tags:[source,category],enabled:true}).onConflict((oc)=>oc.columns(['organization_id','seo_project_id','keyword']).doUpdateSet({tags:[source,category],enabled:true,updated_at:new Date()})).returning('id').executeTakeFirstOrThrow();await trx.insertInto('capere.keyword_rankings').values({organization_id:organizationId,keyword_id:keywordRow.id,checked_on:checkedOn,rank:position?Math.round(position):null,url:null,serp_features:JSON.stringify([]),raw_summary:JSON.stringify(summary)}).onConflict((oc)=>oc.columns(['organization_id','keyword_id','checked_on']).doUpdateSet({rank:position?Math.round(position):null,raw_summary:JSON.stringify(summary)})).execute();}
+    });
+    return {refreshed:items.length,cost:Number(task?.cost??0),checkedAt:checkedOn};
+  }
+
   async removeCompetitor(organizationId: string, projectId: string, competitorId: string) {
     const deleted = await this.database.db.deleteFrom('capere.competitors').where('organization_id','=',organizationId).where('seo_project_id','=',projectId).where('id','=',competitorId).returning('id').executeTakeFirst();
     if (!deleted) throw AppException.notFound(ErrorCode.NOT_FOUND, 'Competitor not found');
@@ -190,6 +219,7 @@ export class DataForSeoService {
         payload: JSON.stringify({ projectId: project.id, maxCrawlPages: 20 }),
       }))
       .execute();
+    await this.database.db.insertInto('capere.scheduled_jobs').values({ organization_id:organizationId,job_type:'dataforseo-keyword-refresh',name:`dataforseo-keywords:${project.id}`,schedule:'weekly',enabled:true,next_run_at:new Date(Date.now()+15*60_000),payload:JSON.stringify({projectId:project.id}) }).onConflict((oc)=>oc.columns(['organization_id','name']).doUpdateSet({enabled:true,payload:JSON.stringify({projectId:project.id})})).execute();
     return project;
   }
 
