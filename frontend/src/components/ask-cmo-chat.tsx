@@ -18,14 +18,47 @@ const prompts = [
   'How is our search visibility performing?',
 ];
 
+function renderInline(value: string) {
+  return value.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={index}>{part.slice(2, -2)}</strong>
+      : part,
+  );
+}
+
+function isTableDivider(value: string) {
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(value);
+}
+
+function tableCells(value: string) {
+  return value.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
+}
+
 function MessageBody({ content }: { content: string }) {
   const lines = content.split('\n');
-  return <div className="ask-cmo-copy">{lines.map((line, index) => {
+  const blocks: React.ReactNode[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    if (index + 1 < lines.length && lines[index].includes('|') && isTableDivider(lines[index + 1])) {
+      const headers = tableCells(lines[index]);
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length && lines[index].includes('|') && lines[index].trim()) {
+        rows.push(tableCells(lines[index]));
+        index += 1;
+      }
+      blocks.push(<div className="ask-cmo-table-wrap" key={`table-${index}`}><table className="ask-cmo-response-table"><thead><tr>{headers.map((header, cellIndex) => <th key={cellIndex}>{renderInline(header)}</th>)}</tr></thead><tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{headers.map((_, cellIndex) => <td key={cellIndex}>{renderInline(row[cellIndex] ?? '—')}</td>)}</tr>)}</tbody></table></div>);
+      continue;
+    }
+    const line = lines[index];
     const bullet = line.match(/^\s*[-*]\s+(.+)/);
-    if (bullet) return <div className="ask-cmo-bullet" key={index}><span>•</span><p>{bullet[1]}</p></div>;
-    if (!line.trim()) return <div className="ask-cmo-space" key={index} />;
-    return <p key={index}>{line.replace(/^#{1,4}\s*/, '')}</p>;
-  })}</div>;
+    if (bullet) blocks.push(<div className="ask-cmo-bullet" key={index}><span>•</span><p>{renderInline(bullet[1])}</p></div>);
+    else if (/^\s*-{3,}\s*$/.test(line)) blocks.push(<hr className="ask-cmo-rule" key={index}/>);
+    else if (!line.trim()) blocks.push(<div className="ask-cmo-space" key={index} />);
+    else blocks.push(<p key={index}>{renderInline(line.replace(/^#{1,4}\s*/, ''))}</p>);
+    index += 1;
+  }
+  return <div className="ask-cmo-copy">{blocks}</div>;
 }
 
 export function AskCmoChat() {
