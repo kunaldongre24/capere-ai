@@ -1,5 +1,6 @@
 import { EmbeddedModule } from '@/components/embedded-module';
 import { CompetitorControls } from '@/components/competitor-controls';
+import { CompetitorPending } from '@/components/competitor-pending';
 import { capereFetch, Envelope } from '@/lib/api';
 
 const sections = [
@@ -250,6 +251,7 @@ export default async function SeoPage({
   }>;
   const project = (d.project && typeof d.project === 'object' ? d.project : null) as { id:string; name:string; site_url:string } | null;
   const targetMetrics = competitors.find((c) => c.metrics?.status === 'ready')?.metrics;
+  const pendingCompetitors = competitors.filter((c) => c.metrics?.status !== 'ready');
   const targetDomain = websiteDomain(project?.site_url);
   const integrations = (Array.isArray(d.integrations) ? d.integrations : []) as Integration[];
   const recs = (Array.isArray(d.recommendations) ? d.recommendations : []) as Array<{
@@ -479,6 +481,7 @@ export default async function SeoPage({
           title="Side-by-side search comparison"
           subtitle="Compare how often each website is found through unpaid Google search results."
         >
+          {pendingCompetitors.length > 0 && <CompetitorPending names={pendingCompetitors.map((c)=>c.name??c.domain)} />}
           {competitors.length ? (
             <div className="comparison-table-wrap"><table className="comparison-table"><thead><tr><th>Measure</th><th><strong>{project?.name ?? 'Your business'}</strong><small>{targetDomain}</small></th>{competitors.map((c)=><th key={c.domain}><strong>{c.name ?? c.domain}</strong><small>{c.domain}</small></th>)}</tr></thead><tbody>{[
               {label:'Estimated organic visits',detail:'Potential monthly visits from unpaid search',target:Number(targetMetrics?.targetOrganicTraffic??0),value:(c:typeof competitors[number])=>Number(c.metrics?.organicTraffic??0)},
