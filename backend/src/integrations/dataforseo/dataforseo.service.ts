@@ -85,16 +85,49 @@ export class DataForSeoService {
     if (!result?.items) throw AppException.serviceUnavailable(ErrorCode.INTEGRATION_ERROR, 'DataForSEO did not return competitor data');
     const byTarget = new Map(result.items.map((item) => [String(item.target ?? '').replace(/^www\./, ''), item]));
     const targetItem = byTarget.get(target);
+    const measurableDomains = result.items.filter((item) => Number(item.metrics?.organic?.count ?? 0) > 0).map((item) => String(item.target ?? '').replace(/^www\./, '')).slice(0, 3);
+    const detailRequests = measurableDomains.map((domain) => ({ target: domain, location_code: project.target_location_code, language_code: project.language_code }));
+    const [overviewResponse, keywordResponse] = detailRequests.length ? await Promise.all([
+      this.adapter.postTasks<Record<string, unknown>>('dataforseo_labs/google/domain_rank_overview/live', detailRequests),
+      this.adapter.postTasks<Record<string, unknown>>('dataforseo_labs/google/ranked_keywords/live', detailRequests.map((row) => ({ ...row, limit: 20, order_by: ['ranked_serp_element.serp_item.rank_absolute,asc'] }))),
+    ]) : [{ tasks: [] }, { tasks: [] }];
+    const details = new Map<string, Record<string, unknown>>();
+    for (let index = 0; index < measurableDomains.length; index += 1) {
+      const overviewRoot = this.object(overviewResponse.tasks?.[index]?.result?.[0]);
+      const overviewItem = Array.isArray(overviewRoot['items']) ? this.object(overviewRoot['items'][0]) : {};
+      const organic = this.object(this.object(overviewItem['metrics'])['organic']);
+      const keywordRoot = this.object(keywordResponse.tasks?.[index]?.result?.[0]);
+      const keywordItems = Array.isArray(keywordRoot['items']) ? keywordRoot['items'] : [];
+      const topKeywords = keywordItems.map((raw) => {
+        const row = this.object(raw); const keywordData = this.object(row['keyword_data']); const keywordInfo = this.object(keywordData['keyword_info']); const serp = this.object(this.object(row['ranked_serp_element'])['serp_item']);
+        return { keyword: String(keywordData['keyword'] ?? ''), rank: Number(serp['rank_absolute'] ?? 0), searchVolume: Number(keywordInfo['search_volume'] ?? 0), url: String(serp['url'] ?? ''), title: String(serp['title'] ?? ''), estimatedVisits: Number(serp['etv'] ?? 0) };
+      }).filter((row) => row.keyword);
+      const pages = new Map<string, { url:string; title:string; estimatedVisits:number; keywords:number }>();
+      for (const keyword of topKeywords) { if (!keyword.url) continue; const page = pages.get(keyword.url) ?? { url:keyword.url,title:keyword.title,estimatedVisits:0,keywords:0 }; page.estimatedVisits += keyword.estimatedVisits; page.keywords += 1; pages.set(keyword.url,page); }
+      details.set(measurableDomains[index], { top3: Number(organic['pos_1'] ?? 0) + Number(organic['pos_2_3'] ?? 0), top10: Number(organic['pos_1'] ?? 0) + Number(organic['pos_2_3'] ?? 0) + Number(organic['pos_4_10'] ?? 0), trafficValue: Number(organic['estimated_paid_traffic_cost'] ?? 0), newKeywords: Number(organic['is_new'] ?? 0), improvedKeywords: Number(organic['is_up'] ?? 0), declinedKeywords: Number(organic['is_down'] ?? 0), topKeywords, topPages: [...pages.values()].sort((a,b)=>b.estimatedVisits-a.estimatedVisits).slice(0,5) });
+    }
+    const targetDetails = details.get(target) ?? {};
+    const targetKeywordSet = new Set((Array.isArray(targetDetails['topKeywords']) ? targetDetails['topKeywords'] : []).map((row) => String(this.object(row)['keyword'] ?? '')));
+    const totalTraffic = result.items.reduce((sum, item) => sum + Number(item.metrics?.organic?.etv ?? 0), 0);
+    const detailCost = [...(overviewResponse.tasks ?? []), ...(keywordResponse.tasks ?? [])].reduce((sum, row) => sum + Number(row.cost ?? 0), 0);
+    const checkedAt = new Date();
     await this.database.transaction(async (trx) => {
       await trx.insertInto('capere.provider_tasks').values({ organization_id: organizationId, integration_id: integration.id, provider: 'data_for_seo', task_type: 'competitor_bulk_traffic', request_fingerprint: fingerprint, provider_task_id: task?.id ?? null, status: 'succeeded', request: JSON.stringify(request), result: JSON.stringify(result), cost_micro_usd: String(Math.round((task?.cost ?? 0) * 1_000_000)), attempts: 1, next_poll_at: null, error: null }).onConflict((oc) => oc.columns(['organization_id','provider','task_type','request_fingerprint']).doUpdateSet({ result: JSON.stringify(result), status: 'succeeded', cost_micro_usd: String(Math.round((task?.cost ?? 0) * 1_000_000)), updated_at: new Date() })).execute();
+      if (detailRequests.length) await trx.insertInto('capere.provider_tasks').values({ organization_id: organizationId, integration_id: integration.id, provider: 'data_for_seo', task_type: 'competitor_rank_details', request_fingerprint: createHash('sha256').update(JSON.stringify(detailRequests)).digest('hex'), provider_task_id: overviewResponse.tasks?.[0]?.id ?? null, status: 'succeeded', request: JSON.stringify(detailRequests), result: JSON.stringify({ overview: overviewResponse.tasks, keywords: keywordResponse.tasks }), cost_micro_usd: String(Math.round(detailCost * 1_000_000)), attempts: 1, next_poll_at: null, error: null }).onConflict((oc) => oc.columns(['organization_id','provider','task_type','request_fingerprint']).doUpdateSet({ result: JSON.stringify({ overview: overviewResponse.tasks, keywords: keywordResponse.tasks }), status: 'succeeded', cost_micro_usd: String(Math.round(detailCost * 1_000_000)), updated_at: new Date() })).execute();
       for (const competitor of competitors) {
         const item = byTarget.get(competitor.domain);
         const organic = item?.metrics?.organic ?? { etv: 0, count: 0 };
         const paid = item?.metrics?.paid ?? { etv: 0, count: 0 };
-        await trx.updateTable('capere.competitors').set({ metrics: JSON.stringify({ status: item ? 'ready' : 'no_data', organicTraffic: Number(organic?.etv ?? 0), rankingKeywords: Number(organic?.count ?? 0), paidTraffic: Number(paid?.etv ?? 0), paidKeywords: Number(paid?.count ?? 0), targetOrganicTraffic: Number(targetItem?.metrics?.organic?.etv ?? 0), targetRankingKeywords: Number(targetItem?.metrics?.organic?.count ?? 0), locationCode: project.target_location_code, languageCode: project.language_code }), last_checked_at: new Date(), updated_at: new Date() }).where('organization_id','=',organizationId).where('id','=',competitor.id).execute();
+        const domainDetails = details.get(competitor.domain) ?? {};
+        const competitorKeywords = Array.isArray(domainDetails['topKeywords']) ? domainDetails['topKeywords'] : [];
+        const opportunities = competitorKeywords.filter((row) => !targetKeywordSet.has(String(this.object(row)['keyword'] ?? ''))).slice(0, 8);
+        const previous = this.object(competitor.metrics); const previousHistory = Array.isArray(previous['history']) ? previous['history'] : [];
+        const snapshot = { checkedAt: checkedAt.toISOString(), organicTraffic: Number(organic?.etv ?? 0), rankingKeywords: Number(organic?.count ?? 0), visibilityShare: totalTraffic > 0 ? Number(organic?.etv ?? 0) / totalTraffic : 0, targetOrganicTraffic: Number(targetItem?.metrics?.organic?.etv ?? 0), targetRankingKeywords: Number(targetItem?.metrics?.organic?.count ?? 0), targetVisibilityShare: totalTraffic > 0 ? Number(targetItem?.metrics?.organic?.etv ?? 0) / totalTraffic : 0 };
+        const history = [...previousHistory, snapshot].slice(-12);
+        await trx.updateTable('capere.competitors').set({ metrics: JSON.stringify({ status: item ? 'ready' : 'no_data', organicTraffic: Number(organic?.etv ?? 0), rankingKeywords: Number(organic?.count ?? 0), visibilityShare: snapshot.visibilityShare, paidTraffic: Number(paid?.etv ?? 0), paidKeywords: Number(paid?.count ?? 0), top3: Number(domainDetails['top3'] ?? 0), top10: Number(domainDetails['top10'] ?? 0), trafficValue: Number(domainDetails['trafficValue'] ?? 0), newKeywords: Number(domainDetails['newKeywords'] ?? 0), improvedKeywords: Number(domainDetails['improvedKeywords'] ?? 0), declinedKeywords: Number(domainDetails['declinedKeywords'] ?? 0), topKeywords: competitorKeywords, keywordOpportunities: opportunities, sharedKeywordCount: competitorKeywords.length - opportunities.length, topPages: domainDetails['topPages'] ?? [], history, targetOrganicTraffic: Number(targetItem?.metrics?.organic?.etv ?? 0), targetRankingKeywords: Number(targetItem?.metrics?.organic?.count ?? 0), targetVisibilityShare: totalTraffic > 0 ? Number(targetItem?.metrics?.organic?.etv ?? 0) / totalTraffic : 0, targetTop3: Number(targetDetails['top3'] ?? 0), targetTop10: Number(targetDetails['top10'] ?? 0), targetTrafficValue: Number(targetDetails['trafficValue'] ?? 0), targetTopKeywords: targetDetails['topKeywords'] ?? [], targetTopPages: targetDetails['topPages'] ?? [], locationCode: project.target_location_code, languageCode: project.language_code }), last_checked_at: checkedAt, updated_at: checkedAt }).where('organization_id','=',organizationId).where('id','=',competitor.id).execute();
       }
     });
-    return { refreshed: competitors.length, cost: task?.cost ?? 0, checkedAt: new Date().toISOString() };
+    return { refreshed: competitors.length, cost: Number(task?.cost ?? 0) + detailCost, checkedAt: checkedAt.toISOString() };
   }
 
   async removeCompetitor(organizationId: string, projectId: string, competitorId: string) {
@@ -355,6 +388,7 @@ export class DataForSeoService {
   }
 
   private object(value: unknown): Record<string, unknown> {
+    if (typeof value === 'string') { try { return JSON.parse(value) as Record<string, unknown>; } catch { return {}; } }
     return value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};

@@ -11,6 +11,10 @@ export class DataForSeoAdapter {
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {}
 
   async postTask<T>(path: string, request: unknown): Promise<DataForSeoResponse<T>> {
+    return this.postTasks<T>(path, [request]);
+  }
+
+  async postTasks<T>(path: string, requests: unknown[]): Promise<DataForSeoResponse<T>> {
     const response = await providerFetch(
       'data_for_seo',
       `${this.config.dataForSeo.baseUrl.replace(/\/$/, '')}/${path.replace(/^\//, '')}`,
@@ -20,7 +24,7 @@ export class DataForSeoAdapter {
           authorization: `Basic ${Buffer.from(`${this.config.dataForSeo.login}:${this.config.dataForSeo.password}`).toString('base64')}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify([request]),
+        body: JSON.stringify(requests),
       },
     );
     return readJson<DataForSeoResponse<T>>('data_for_seo', response);
