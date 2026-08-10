@@ -48,6 +48,24 @@ export class DataForSeoService {
       .executeTakeFirstOrThrow();
   }
 
+  async listCompetitors(organizationId: string, projectId: string) {
+    const project = await this.database.db
+      .selectFrom('capere.seo_projects')
+      .select('id')
+      .where('organization_id', '=', organizationId)
+      .where('id', '=', projectId)
+      .executeTakeFirst();
+    if (!project) throw AppException.notFound(ErrorCode.NOT_FOUND, 'SEO project not found');
+    return this.database.db
+      .selectFrom('capere.competitors')
+      .select(['id', 'domain', 'name', 'metrics', 'last_checked_at', 'created_at', 'updated_at'])
+      .where('organization_id', '=', organizationId)
+      .where('seo_project_id', '=', projectId)
+      .orderBy('created_at')
+      .limit(10)
+      .execute();
+  }
+
   async addCompetitor(organizationId: string, projectId: string, dto: CreateCompetitorDto) {
     const project = await this.database.db.selectFrom('capere.seo_projects').select('id').where('organization_id','=',organizationId).where('id','=',projectId).executeTakeFirst();
     if (!project) throw AppException.notFound(ErrorCode.NOT_FOUND, 'SEO project not found');

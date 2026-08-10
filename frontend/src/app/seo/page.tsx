@@ -246,13 +246,21 @@ export default async function SeoPage({
     position: number;
     latestDate: string;
   }>;
-  const competitors = (Array.isArray(d.competitors) ? d.competitors : []) as Array<{
+  type Competitor = {
+    id?: string;
     domain: string;
     name: string | null;
     last_checked_at: string | null;
     metrics?: { status?: string; organicTraffic?: number; rankingKeywords?: number; visibilityShare?:number; top3?:number; top10?:number; trafficValue?:number; targetOrganicTraffic?: number; targetRankingKeywords?: number; targetVisibilityShare?:number; targetTop3?:number; targetTop10?:number; targetTrafficValue?:number; locationCode?: number; keywordOpportunities?:Array<{keyword:string;rank:number;searchVolume:number;url:string;title:string;estimatedVisits:number}>; topPages?:Array<{url:string;title:string;estimatedVisits:number;keywords:number}>; history?:Array<{checkedAt:string;organicTraffic:number;rankingKeywords:number;visibilityShare:number;targetOrganicTraffic:number;targetRankingKeywords:number;targetVisibilityShare:number}> };
-  }>;
+  };
+  let competitors = (Array.isArray(d.competitors) ? d.competitors : []) as Competitor[];
   const project = (d.project && typeof d.project === 'object' ? d.project : null) as { id:string; name:string; site_url:string } | null;
+  if (project?.id) {
+    try {
+      const savedCompetitors = await capereFetch<Envelope<Competitor[]>>(`/api/v1/integrations/data-for-seo/projects/${project.id}/competitors`);
+      competitors = Array.isArray(savedCompetitors.data) ? savedCompetitors.data : competitors;
+    } catch {}
+  }
   const targetMetrics = competitors.find((c) => c.metrics?.status === 'ready')?.metrics;
   const pendingCompetitors = competitors.filter((c) => c.metrics?.status !== 'ready');
   const targetDomain = websiteDomain(project?.site_url);
