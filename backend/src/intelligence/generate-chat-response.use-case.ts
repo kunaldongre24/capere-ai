@@ -23,6 +23,7 @@ export interface GenerateChatResponseCommand {
   readonly priorMessages?: LlmMessage[];
   readonly temperature?: number;
   readonly maxTokens?: number;
+  readonly maxIterations?: number;
   readonly signal?: AbortSignal;
   readonly ephemeral: boolean;
 }
@@ -120,6 +121,7 @@ export class GenerateChatResponseUseCase {
       ],
       temperature: command.temperature,
       maxTokens: command.maxTokens,
+      maxIterations: command.maxIterations,
       allowMutatingTools: false,
       toolsEnabled,
       promptName: prompt.name,
@@ -170,7 +172,13 @@ export class GenerateChatResponseUseCase {
         organizationId: command.organizationId,
         role: 'assistant',
         content,
-        metadata: { modelCalls: result.iterations, exhausted: result.exhausted, reviewed, revised },
+        metadata: {
+          modelCalls: result.iterations,
+          exhausted: result.exhausted,
+          reviewed,
+          revised,
+          sources: [...new Set(result.toolResults.filter((tool) => tool.ok).map((tool) => tool.toolName))],
+        },
       });
     }
     this.logger.debug(

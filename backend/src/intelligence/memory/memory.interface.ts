@@ -39,6 +39,7 @@ export interface ConversationTurn {
   readonly toolCallId?: string;
   readonly toolName?: string;
   readonly toolArguments?: unknown;
+  readonly metadata?: Record<string, unknown>;
   readonly createdAt: Date;
 }
 

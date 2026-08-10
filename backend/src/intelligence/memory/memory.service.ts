@@ -90,6 +90,7 @@ export class MemoryService implements ConversationMemory, BusinessMemory {
         'tool_call_id',
         'tool_name',
         'tool_arguments',
+        'metadata',
         'created_at',
       ])
       .where('organization_id', '=', organizationId)
@@ -105,6 +106,7 @@ export class MemoryService implements ConversationMemory, BusinessMemory {
       toolCallId: row.tool_call_id ?? undefined,
       toolName: row.tool_name ?? undefined,
       toolArguments: row.tool_arguments ?? undefined,
+      metadata: this.record(row.metadata),
       createdAt: row.created_at,
     }));
   }
@@ -146,10 +148,17 @@ export class MemoryService implements ConversationMemory, BusinessMemory {
       .where('id', '=', params.sessionId)
       .executeTakeFirstOrThrow();
     const messages = (await this.recent(params.organizationId, params.sessionId, 80))
-      .filter((message) => message.role === 'user' || message.role === 'assistant')
+      .filter((message) =>
+        (message.role === 'user' || message.role === 'assistant') &&
+        !message.toolCallId &&
+        message.content.trim().length > 0,
+      )
       .map((message) => ({
         role: message.role,
         content: message.content,
+        sources: Array.isArray(message.metadata?.sources)
+          ? message.metadata.sources.filter((source): source is string => typeof source === 'string')
+          : [],
         createdAt: message.createdAt,
       }));
     return { ...session, messages };
@@ -250,6 +259,7 @@ export class MemoryService implements ConversationMemory, BusinessMemory {
         toolCallId: params.toolCallId,
         toolName: params.toolName,
         toolArguments: params.toolArguments,
+        metadata: params.metadata,
         createdAt: row.created_at,
       };
     });
@@ -366,6 +376,19 @@ export class MemoryService implements ConversationMemory, BusinessMemory {
       .executeTakeFirstOrThrow();
 
     return row.id;
+  }
+
+  private record(value: unknown): Record<string, unknown> {
+    if (value && typeof value === 'object' && !Array.isArray(value))
+      return value as Record<string, unknown>;
+    if (typeof value === 'string') {
+      try {
+        const parsed: unknown = JSON.parse(value);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+          return parsed as Record<string, unknown>;
+      } catch {}
+    }
+    return {};
   }
 
   /**

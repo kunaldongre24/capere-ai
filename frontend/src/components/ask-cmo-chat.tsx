@@ -8,7 +8,7 @@ type Session = {
   last_message_at: string | null;
   created_at: string;
 };
-type Message = { role: 'user' | 'assistant'; content: string; createdAt: string };
+type Message = { role: 'user' | 'assistant'; content: string; createdAt: string; sources?: string[] };
 type Envelope<T> = { data: T };
 
 const prompts = [
@@ -36,7 +36,6 @@ export function AskCmoChat() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sources, setSources] = useState<string[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
 
   async function loadConversation(id: string) {
@@ -48,7 +47,6 @@ export function AskCmoChat() {
       const payload = await response.json() as Envelope<{ messages: Message[] }>;
       setSessionId(id);
       setMessages(payload.data.messages);
-      setSources([]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'This conversation could not be loaded.');
     } finally {
@@ -75,7 +73,6 @@ export function AskCmoChat() {
   function startNew() {
     setSessionId(null);
     setMessages([]);
-    setSources([]);
     setError(null);
     setInput('');
   }
@@ -96,8 +93,7 @@ export function AskCmoChat() {
       const payload = await response.json() as Envelope<{ sessionId: string; message: string; sources: string[] }> & { error?: { message?: string } };
       if (!response.ok) throw new Error(payload.error?.message ?? 'Ask CMO could not prepare an answer.');
       setSessionId(payload.data.sessionId);
-      setSources(payload.data.sources ?? []);
-      setMessages((current) => [...current, { role: 'assistant', content: payload.data.message, createdAt: new Date().toISOString() }]);
+      setMessages((current) => [...current, { role: 'assistant', content: payload.data.message, sources: payload.data.sources ?? [], createdAt: new Date().toISOString() }]);
       void loadSessions(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Ask CMO could not prepare an answer.');
@@ -140,7 +136,7 @@ export function AskCmoChat() {
           <div className="ask-cmo-suggestions">{prompts.map((prompt) => <button type="button" key={prompt} onClick={() => void send(prompt)}>{prompt}</button>)}</div>
         </div> : messages.map((message, index) => <article className={`ask-cmo-message ${message.role}`} key={`${message.createdAt}-${index}`}>
           <div className="ask-cmo-message-avatar">{message.role === 'assistant' ? 'C' : 'You'}</div>
-          <div className="ask-cmo-message-content"><div className="ask-cmo-message-meta"><strong>{message.role === 'assistant' ? 'Capere AI CMO' : 'You'}</strong><time>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div><MessageBody content={message.content}/>{message.role === 'assistant' && index === messages.length - 1 && sources.length > 0 && <div className="ask-cmo-sources"><span>Data checked</span>{sources.map((source) => <small key={source}>{source}</small>)}</div>}</div>
+          <div className="ask-cmo-message-content"><div className="ask-cmo-message-meta"><strong>{message.role === 'assistant' ? 'Capere AI CMO' : 'You'}</strong><time>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div><MessageBody content={message.content}/>{message.role === 'assistant' && message.sources && message.sources.length > 0 && <div className="ask-cmo-sources"><span>Data checked</span>{message.sources.map((source) => <small key={source}>{source}</small>)}</div>}</div>
         </article>)}
         {sending && <article className="ask-cmo-message assistant"><div className="ask-cmo-message-avatar">C</div><div className="ask-cmo-message-content ask-cmo-thinking"><span className="ask-cmo-spinner"/><div><strong>Reviewing your business data</strong><p>This can take a few moments while Capere checks the relevant sources.</p></div></div></article>}
         <div ref={endRef}/>

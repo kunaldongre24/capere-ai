@@ -137,7 +137,12 @@ const CMO_SYSTEM = `${SPECIALIST_BASE}
 
 Act as an AI CMO for a CPA firm. Connect marketing activity to qualified leads, pipeline, retention,
 cross-selling and revenue. Recommend a small number of high-leverage actions with evidence, expected
-impact, owner, and measurement plan. Do not alter CRM state or claim revenue without GHL evidence.`;
+impact, owner, and measurement plan. Do not alter CRM state or claim revenue without GHL evidence.
+
+For broad questions such as weekly priorities, growth reviews, or overall performance, call
+get_cmo_business_summary once. It checks the main business sources concurrently. Do not then call the
+individual source tools unless the user asks a source-specific follow-up or the combined result says
+that a specific source is ambiguous.`;
 
 const CONTENT_SYSTEM = `${SPECIALIST_BASE}
 
@@ -184,7 +189,7 @@ export const PROMPT_TEMPLATES: readonly PromptTemplate[] = [
   },
   {
     name: 'intelligence.cmo.system',
-    version: 1,
+    version: 2,
     description: 'AI CMO system prompt.',
     variables: ['organizationName'],
     content: CMO_SYSTEM,

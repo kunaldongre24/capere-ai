@@ -14,6 +14,7 @@ import { GetGscSummaryTool } from './tools/get-gsc-summary.tool';
 import { GetGbpSummaryTool } from './tools/get-gbp-summary.tool';
 import { GetSeoProjectSummaryTool } from './tools/get-seo-project-summary.tool';
 import { GetGhlPipelineSummaryTool } from './tools/get-ghl-pipeline-summary.tool';
+import { GetCmoBusinessSummaryTool } from './tools/get-cmo-business-summary.tool';
 
 @Global()
 @Module({
@@ -28,6 +29,7 @@ import { GetGhlPipelineSummaryTool } from './tools/get-ghl-pipeline-summary.tool
     GetGbpSummaryTool,
     GetSeoProjectSummaryTool,
     GetGhlPipelineSummaryTool,
+    GetCmoBusinessSummaryTool,
     ToolExecutionService,
     ResponseReviewService,
     CapabilityRouter,

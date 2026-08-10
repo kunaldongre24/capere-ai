@@ -10,6 +10,15 @@ import { ContentGenerationService } from './content-generation.service';
 import type { DashboardKind } from '../shared/database';
 import { AskCmoDto, GenerateContentDraftDto } from './reporting.dto';
 
+const CMO_SOURCE_LABELS: Record<string, string> = {
+  get_cmo_business_summary: 'Business overview (GA4, Search Console, GoHighLevel, SEO and GBP checks)',
+  get_ga4_summary: 'Website analytics',
+  get_gsc_summary: 'Google Search Console',
+  get_ghl_pipeline_summary: 'GoHighLevel pipeline',
+  get_seo_project_summary: 'SEO audit',
+  get_gbp_summary: 'Google Business Profile',
+};
+
 @ApiTags('command-centers')
 @ApiBearerAuth('supabase-jwt')
 @Controller({ path: 'command-centers', version: '1' })
@@ -61,7 +70,13 @@ export class DashboardController {
     @CurrentUser('id') userId: string,
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
   ) {
-    return this.memory.sessionConversation({ organizationId, userId, sessionId });
+    return this.memory.sessionConversation({ organizationId, userId, sessionId }).then((conversation) => ({
+      ...conversation,
+      messages: conversation.messages.map((message) => ({
+        ...message,
+        sources: message.sources.map((source) => CMO_SOURCE_LABELS[source] ?? source),
+      })),
+    }));
   }
 
   @Post('ai-cmo/ask')
@@ -82,18 +97,12 @@ export class DashboardController {
       sessionId: dto.sessionId,
       ephemeral: false,
       maxTokens: 1_200,
+      maxIterations: 3,
     });
-    const sourceLabels: Record<string, string> = {
-      get_ga4_summary: 'Website analytics',
-      get_gsc_summary: 'Google Search Console',
-      get_ghl_pipeline_summary: 'GoHighLevel pipeline',
-      get_seo_project_summary: 'SEO audit',
-      get_gbp_summary: 'Google Business Profile',
-    };
     return {
       sessionId: result.sessionId,
       message: result.content,
-      sources: [...new Set(result.toolResults.filter((tool) => tool.ok).map((tool) => sourceLabels[tool.toolName] ?? tool.toolName))],
+      sources: [...new Set(result.toolResults.filter((tool) => tool.ok).map((tool) => CMO_SOURCE_LABELS[tool.toolName] ?? tool.toolName))],
     };
   }
 
