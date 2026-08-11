@@ -16,10 +16,27 @@ function GoogleConnectButton({ provider, label, embedded }: { provider: string; 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [authorizationId, setAuthorizationId] = useState<string | null>(null);
+  const [options, setOptions] = useState<Array<{ id: string; name?: string; parentAccount?: string }>>([]);
+  const [selected, setSelected] = useState('');
 
-  const refreshStatus = () => fetch('/api/capere/integrations').then((r) => r.ok ? r.json() : null).then((body) => {
-      setConnected((body?.data ?? []).some((item: { provider?: string; status?: string }) => item.status === 'connected' && item.provider === provider));
-    }).catch(() => undefined);
+  const refreshStatus = async () => {
+    const response = await fetch('/api/capere/integrations/google/connection-status');
+    const body = response.ok ? await response.json() : null;
+    const status = body?.data;
+    const isConnected = (status?.integrations ?? []).some((item: { provider?: string; status?: string }) => item.status === 'connected' && item.provider === provider);
+    setConnected(isConnected);
+    setAuthorizationId(status?.authorizationId ?? null);
+    if (status?.authorizationId && !isConnected) {
+      const resourcesResponse = await fetch(`/api/capere/integrations/google/available-resources?authorizationId=${encodeURIComponent(status.authorizationId)}`);
+      const resourcesBody = resourcesResponse.ok ? await resourcesResponse.json() : null;
+      const key = provider === 'google_analytics_4' ? 'ga4' : provider === 'google_search_console' ? 'gsc' : 'gbp';
+      const discovered = (resourcesBody?.data?.[key] ?? []).filter((item: { id?: string }) => Boolean(item.id));
+      setOptions(discovered);
+      setSelected((current) => current || discovered[0]?.id || '');
+    } else if (isConnected) setOptions([]);
+    return status;
+  };
 
   useEffect(() => {
     refreshStatus();
@@ -30,7 +47,9 @@ function GoogleConnectButton({ provider, label, embedded }: { provider: string; 
       }
     };
     window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
+    const onFocus = () => { setLoading(false); void refreshStatus(); };
+    window.addEventListener('focus', onFocus);
+    return () => { window.removeEventListener('message', onMessage); window.removeEventListener('focus', onFocus); };
   }, [provider]);
 
   async function connect() {
@@ -42,18 +61,47 @@ function GoogleConnectButton({ provider, label, embedded }: { provider: string; 
       return;
     }
     try {
+      const startedAt = Date.now();
       const response = await fetch(`/api/capere/integrations/google/authorize${embedded ? '?returnTo=cmo' : ''}`);
       const body = await response.json();
       if (!response.ok || !body?.data?.authorizationUrl) throw new Error(body?.error?.message ?? 'Unable to start Google authorization');
       if (popup) popup.location.href = body.data.authorizationUrl;
       else window.location.assign(body.data.authorizationUrl);
+      if (popup) {
+        const interval = window.setInterval(async () => {
+          const status = await refreshStatus().catch(() => null);
+          const authorizedAt = status?.authorizedAt ? new Date(status.authorizedAt).getTime() : 0;
+          if (authorizedAt >= startedAt - 1_000 || Date.now() - startedAt > 120_000) {
+            window.clearInterval(interval);
+            setLoading(false);
+          }
+        }, 2_000);
+      }
     } catch (cause) {
       popup?.close();
       setError(cause instanceof Error ? cause.message : 'Unable to start Google authorization'); setLoading(false);
     }
   }
 
-  return <>{connected ? <span className="badge">Connected automatically</span> : <button className="btn" type="button" onClick={connect} disabled={loading}>{loading ? 'Waiting for Google…' : `Connect ${label}`}</button>}{error && <p className="error-text" role="alert">{error}</p>}</>;
+  async function linkSelected() {
+    if (!authorizationId || !selected) return;
+    setLoading(true); setError(null);
+    const option = options.find((item) => item.id === selected);
+    try {
+      const response = await fetch(`/api/capere/integrations/google/resources?authorizationId=${encodeURIComponent(authorizationId)}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ provider, resourceId: selected, resourceName: option?.name, parentAccount: option?.parentAccount }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.error?.message ?? `Unable to link ${label}`);
+      await refreshStatus();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : `Unable to link ${label}`);
+    } finally { setLoading(false); }
+  }
+
+  return <>{connected ? <span className="badge">Connected</span> : options.length ? <div><select value={selected} onChange={(event) => setSelected(event.target.value)} aria-label={`Choose ${label} resource`}>{options.map((option) => <option key={option.id} value={option.id}>{option.name || option.id}</option>)}</select><button className="btn" type="button" onClick={linkSelected} disabled={loading || !selected}>{loading ? 'Linking…' : `Link ${label}`}</button></div> : <button className="btn" type="button" onClick={connect} disabled={loading}>{loading ? 'Waiting for Google…' : `Connect ${label}`}</button>}{error && <p className="error-text" role="alert">{error}</p>}</>;
 }
 
 export function IntegrationConnectPanel({ embedded = false }: { embedded?: boolean }) {

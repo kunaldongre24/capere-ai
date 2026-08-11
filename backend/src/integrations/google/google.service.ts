@@ -160,6 +160,17 @@ export class GoogleService {
       })
       .execute();
     const automatic = await this.autoConnectResources(row.organization_id, authorizationId);
+    await this.database.db
+      .updateTable('capere.integration_authorizations')
+      .set({
+        metadata: JSON.stringify({
+          autoConnectedProviders: automatic.connected.map((item) => item.provider),
+          unmatchedProviders: automatic.unmatched,
+          warnings: automatic.warnings,
+        }),
+      })
+      .where('id', '=', authorizationId)
+      .execute();
     return {
       organizationId: row.organization_id,
       authorizationId,
@@ -267,6 +278,39 @@ export class GoogleService {
       .where('organization_id', '=', organizationId)
       .where('authorization_id', '=', authorizationId)
       .execute();
+  }
+
+  async connectionStatus(organizationId: string) {
+    const authorization = await this.database.db
+      .selectFrom('capere.integration_authorizations')
+      .select(['id', 'metadata', 'created_at'])
+      .where('organization_id', '=', organizationId)
+      .where('provider', '=', 'google')
+      .orderBy('created_at', 'desc')
+      .executeTakeFirst();
+    const integrations = await this.database.db
+      .selectFrom('capere.integrations')
+      .select(['provider', 'status', 'account_id', 'account_name'])
+      .where('organization_id', '=', organizationId)
+      .where('provider', 'in', [
+        'google_analytics_4',
+        'google_search_console',
+        'google_business_profile',
+      ])
+      .execute();
+    const metadata =
+      authorization?.metadata && typeof authorization.metadata === 'object'
+        ? (authorization.metadata as Record<string, unknown>)
+        : {};
+    return {
+      authorized: Boolean(authorization),
+      authorizationId: authorization?.id,
+      authorizedAt: authorization?.created_at,
+      integrations,
+      unmatchedProviders: Array.isArray(metadata.unmatchedProviders)
+        ? metadata.unmatchedProviders
+        : [],
+    };
   }
 
   async discoverResources(

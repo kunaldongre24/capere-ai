@@ -72,6 +72,12 @@ export class GoogleController {
     return this.google.discoverResources(organizationId, authorizationId);
   }
 
+  @Get('connection-status')
+  @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
+  status(@CurrentOrg() organizationId: string) {
+    return this.google.connectionStatus(organizationId);
+  }
+
   @Post('sync')
   @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
   sync(@CurrentOrg() organizationId: string, @Query('integrationId') integrationId: string) {
