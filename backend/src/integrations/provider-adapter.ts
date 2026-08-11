@@ -8,6 +8,7 @@ export class ProviderAdapterError extends Error {
     readonly kind: ProviderErrorKind,
     readonly status?: number,
     readonly retryAfterMs?: number,
+    readonly details?: { reason?: string; quotaLimitValue?: string; service?: string },
   ) {
     super(message);
     this.name = 'ProviderAdapterError';
@@ -48,12 +49,28 @@ export async function providerFetch(
               ? 'unavailable'
               : 'invalid';
   const retryAfter = response.headers.get('retry-after');
+  let details: ProviderAdapterError['details'];
+  try {
+    const body = (await response.clone().json()) as {
+      error?: { details?: Array<{ reason?: string; metadata?: Record<string, string> }> };
+    };
+    const info = body.error?.details?.find((item) => item.metadata?.quota_limit_value);
+    if (info)
+      details = {
+        reason: info.reason,
+        quotaLimitValue: info.metadata?.quota_limit_value,
+        service: info.metadata?.service,
+      };
+  } catch {
+    // Error response bodies are optional and never required for classification.
+  }
   throw new ProviderAdapterError(
     provider,
     `${provider} returned HTTP ${response.status}`,
     kind,
     response.status,
     retryAfter && /^\d+$/.test(retryAfter) ? Number(retryAfter) * 1_000 : undefined,
+    details,
   );
 }
 

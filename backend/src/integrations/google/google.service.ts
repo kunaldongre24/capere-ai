@@ -604,8 +604,14 @@ export class GoogleService {
       return {
         warning: {
           provider,
-          code: error.kind.toUpperCase() as GoogleDiscoveryWarningDto['code'],
-          message: `${provider.toUpperCase()} resource discovery is temporarily unavailable`,
+          code:
+            provider === 'gbp' && error.details?.quotaLimitValue === '0'
+              ? 'FORBIDDEN'
+              : (error.kind.toUpperCase() as GoogleDiscoveryWarningDto['code']),
+          message:
+            provider === 'gbp' && error.details?.quotaLimitValue === '0'
+              ? 'Google Business Profile API access is not enabled for the Capere OAuth project; an administrator must request a non-zero GBP API quota'
+              : `${provider.toUpperCase()} resource discovery is temporarily unavailable`,
           ...(resourceId !== undefined ? { resourceId } : {}),
           ...(error.retryAfterMs !== undefined ? { retryAfterMs: error.retryAfterMs } : {}),
         },
