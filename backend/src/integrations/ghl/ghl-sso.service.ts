@@ -84,6 +84,13 @@ export class GhlSsoService {
     const location = await this.database.db
       .selectFrom('capere.ghl_locations as l')
       .innerJoin('capere.organizations as o', 'o.id', 'l.organization_id')
+      .innerJoin('capere.integrations as i', (join) =>
+        join
+          .onRef('i.organization_id', '=', 'l.organization_id')
+          .onRef('i.ghl_location_id', '=', 'l.id')
+          .on('i.provider', '=', 'go_high_level')
+          .on('i.status', '=', 'connected'),
+      )
       .select(['l.organization_id', 'o.status'])
       .where('l.ghl_location_id', '=', locationId)
       .where('o.status', '=', 'active')
