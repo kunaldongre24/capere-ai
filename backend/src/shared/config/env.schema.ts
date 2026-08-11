@@ -51,6 +51,7 @@ export const envSchema = z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
     CORS_ORIGINS: csv.default('http://localhost:8080'),
+    APP_WEB_URL: z.string().url().default('https://app.capereai.com'),
 
     // --- Database ---
     DATABASE_URL: z.string().url('must be a valid postgres connection string'),

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { CryptoService } from '../shared/crypto';
 import { DatabaseService } from '../shared/database';
@@ -75,6 +75,117 @@ export class IntegrationService {
         userType: token.userType ?? null,
       },
     );
+  }
+
+  async installGhlOauth(token: GhlTokenSet) {
+    if (!token.locationId && token.companyId) {
+      const agencyCredentials: GhlCredentials = {
+        accessToken: token.access_token,
+        refreshToken: token.refresh_token ?? null,
+        userType: token.userType,
+      };
+      let locations;
+      try {
+        locations = await this.ghl.listCompanyLocations(agencyCredentials, token.companyId);
+      } catch (error) {
+        if (error instanceof GhlAdapterError && error.kind === 'rate_limited')
+          throw AppException.tooManyRequests('GoHighLevel is rate limiting location discovery');
+        throw AppException.badRequest(
+          ErrorCode.INTEGRATION_ERROR,
+          'GoHighLevel locations could not be discovered for this agency installation',
+        );
+      }
+      if (locations.length === 0)
+        throw AppException.badRequest(
+          ErrorCode.INTEGRATION_ERROR,
+          'GoHighLevel returned no installed locations for this agency',
+        );
+
+      const installed: unknown[] = [];
+      const failed: Array<{ locationId: string; message: string }> = [];
+      for (const location of locations) {
+        try {
+          const locationToken = await this.ghl.locationToken(
+            agencyCredentials,
+            token.companyId,
+            location.id,
+          );
+          installed.push(await this.installGhlOauth(locationToken));
+        } catch (error) {
+          failed.push({
+            locationId: location.id,
+            message: error instanceof Error ? error.message : 'Location installation failed',
+          });
+        }
+      }
+      if (installed.length === 0)
+        throw AppException.badRequest(
+          ErrorCode.INTEGRATION_ERROR,
+          'GoHighLevel did not authorize any location installations',
+          { failed },
+        );
+      return { installed: installed.length, failed };
+    }
+
+    if (!token.locationId)
+      throw AppException.badRequest(
+        ErrorCode.INTEGRATION_ERROR,
+        'GoHighLevel did not return an installed location or agency',
+      );
+
+    const credentials: GhlCredentials = {
+      accessToken: token.access_token,
+      refreshToken: token.refresh_token ?? null,
+      userType: token.userType,
+    };
+    let location;
+    try {
+      location = await this.ghl.getLocation(credentials, token.locationId);
+    } catch (error) {
+      if (error instanceof GhlAdapterError && error.kind === 'rate_limited')
+        throw AppException.tooManyRequests('GoHighLevel is rate limiting requests');
+      if (error instanceof GhlAdapterError && ['timeout', 'unavailable'].includes(error.kind))
+        throw AppException.serviceUnavailable(
+          ErrorCode.INTEGRATION_ERROR,
+          'GoHighLevel is temporarily unavailable; retry shortly',
+        );
+      throw AppException.badRequest(
+        ErrorCode.INTEGRATION_ERROR,
+        'GoHighLevel installation could not be verified',
+      );
+    }
+
+    const organizationId = await this.database.transaction(async (trx) => {
+      await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`go_high_level:${location.id}`}, 0))`.execute(
+        trx,
+      );
+      const existing = await trx
+        .selectFrom('capere.ghl_locations')
+        .select('organization_id')
+        .where('ghl_location_id', '=', location.id)
+        .executeTakeFirst();
+      if (existing) return existing.organization_id;
+
+      const slug = `ghl-${createHash('sha256').update(location.id).digest('hex').slice(0, 20)}`;
+      const organization = await trx
+        .insertInto('capere.organizations')
+        .values({
+          name: location.name?.trim() || 'GoHighLevel account',
+          slug,
+          settings: JSON.stringify({ provisionedBy: 'ghl_agency_install' }),
+        })
+        .onConflict((conflict) =>
+          conflict.column('slug').doUpdateSet({
+            name: location.name?.trim() || 'GoHighLevel account',
+            updated_at: new Date(),
+          }),
+        )
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return organization.id;
+    });
+
+    return this.connectGhlOauth(organizationId, token);
   }
 
   private async connectGhlCredentials(

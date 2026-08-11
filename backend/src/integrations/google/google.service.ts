@@ -5,6 +5,8 @@ import { DatabaseService } from '../../shared/database';
 import { EventType, OutboxService } from '../../shared/events';
 import { AppException, ErrorCode } from '../../shared/http';
 import { ProviderAdapterError } from '../provider-adapter';
+import { GhlAdapter } from '../ghl/ghl.adapter';
+import { GhlTokenService } from '../ghl/ghl-token.service';
 import { GoogleAdapter, type GoogleTokenSet } from './google.adapter';
 import { GoogleTokenService } from './google-token.service';
 import type {
@@ -16,6 +18,26 @@ import type {
 const OAUTH_TTL_MS = 10 * 60_000;
 
 type GoogleResourceProvider = 'ga4' | 'gsc' | 'gbp';
+
+type AutoMatchTarget = {
+  readonly names: readonly string[];
+  readonly domain?: string;
+};
+
+export function normalizedBusinessName(value: string | undefined): string {
+  return (value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+export function normalizedDomain(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const candidate = value.startsWith('sc-domain:') ? value.slice(10) : value;
+  try {
+    const url = new URL(candidate.includes('://') ? candidate : `https://${candidate}`);
+    return url.hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return undefined;
+  }
+}
 
 type DiscoveryResult<T> =
   | { readonly value: T; readonly warning?: never }
@@ -29,6 +51,8 @@ export class GoogleService {
     private readonly google: GoogleAdapter,
     private readonly outbox: OutboxService,
     private readonly tokens: GoogleTokenService,
+    private readonly ghl: GhlAdapter,
+    private readonly ghlTokens: GhlTokenService,
   ) {}
 
   async beginAuthorization(organizationId: string, userId: string | undefined): Promise<string> {
@@ -68,7 +92,7 @@ export class GoogleService {
   async completeAuthorization(
     state: string,
     code: string,
-  ): Promise<{ organizationId: string; authorizationId: string }> {
+  ) {
     const stateHash = createHash('sha256').update(state).digest('hex');
     const row = await this.database.transaction(async (trx) => {
       const found = await trx
@@ -127,7 +151,8 @@ export class GoogleService {
         metadata: JSON.stringify({}),
       })
       .execute();
-    return { organizationId: row.organization_id, authorizationId };
+    const automatic = await this.autoConnectResources(row.organization_id, authorizationId);
+    return { organizationId: row.organization_id, authorizationId, ...automatic };
   }
 
   async connectResource(
@@ -271,6 +296,140 @@ export class GoogleService {
       gbp: gbp.value?.resources ?? [],
       warnings: [...warnings, ...(gbp.value?.warnings ?? [])],
     };
+  }
+
+  async autoConnectResources(organizationId: string, authorizationId: string) {
+    const [resources, target] = await Promise.all([
+      this.discoverResources(organizationId, authorizationId),
+      this.googleMatchTarget(organizationId),
+    ]);
+    const candidates: Array<{ provider: ConnectGoogleResourceDto['provider']; resource?: ConnectGoogleResourceDto }> = [
+      {
+        provider: 'google_analytics_4',
+        resource: this.matchNamedResource(resources.ga4, target, 'google_analytics_4'),
+      },
+      {
+        provider: 'google_search_console',
+        resource: this.matchSearchConsole(resources.gsc, target),
+      },
+      {
+        provider: 'google_business_profile',
+        resource: this.matchGbp(resources.gbp, target),
+      },
+    ];
+    const connected = [];
+    const unmatched = [];
+    for (const candidate of candidates) {
+      if (!candidate.resource) {
+        unmatched.push(candidate.provider);
+        continue;
+      }
+      connected.push(
+        await this.connectResource(organizationId, authorizationId, candidate.resource),
+      );
+    }
+    return { connected, unmatched, warnings: resources.warnings };
+  }
+
+  private async googleMatchTarget(organizationId: string): Promise<AutoMatchTarget> {
+    const organization = await this.database.db
+      .selectFrom('capere.organizations')
+      .select('name')
+      .where('id', '=', organizationId)
+      .executeTakeFirstOrThrow();
+    const integration = await this.database.db
+      .selectFrom('capere.integrations as i')
+      .leftJoin('capere.ghl_locations as l', 'l.id', 'i.ghl_location_id')
+      .select(['i.id', 'l.name'])
+      .where('i.organization_id', '=', organizationId)
+      .where('i.provider', '=', 'go_high_level')
+      .where('i.status', '=', 'connected')
+      .executeTakeFirst();
+    let website: string | undefined;
+    let liveName: string | undefined;
+    if (integration) {
+      try {
+        const credentials = await this.ghlTokens.credentials(organizationId, integration.id);
+        const row = await this.database.db
+          .selectFrom('capere.ghl_locations')
+          .select('ghl_location_id')
+          .where('organization_id', '=', organizationId)
+          .executeTakeFirst();
+        if (row) {
+          const location = await this.ghl.getLocation(credentials, row.ghl_location_id);
+          website = location.website;
+          liveName = location.name;
+        }
+      } catch {
+        // Matching can still use the persisted organization/location names.
+      }
+    }
+    return {
+      names: [organization.name, integration?.name, liveName].filter(
+        (name): name is string => Boolean(name?.trim()),
+      ),
+      domain: normalizedDomain(website),
+    };
+  }
+
+  private matchNamedResource(
+    resources: Array<{ id?: string; name?: string }>,
+    target: AutoMatchTarget,
+    provider: ConnectGoogleResourceDto['provider'],
+  ): ConnectGoogleResourceDto | undefined {
+    const valid = resources.filter((resource): resource is { id: string; name?: string } => Boolean(resource.id));
+    const matched = this.uniqueNameMatch(valid, target.names);
+    const selected = matched ?? (valid.length === 1 ? valid[0] : undefined);
+    return selected
+      ? { provider, resourceId: selected.id, resourceName: selected.name }
+      : undefined;
+  }
+
+  private matchSearchConsole(
+    resources: GoogleDiscoveryResponseDto['gsc'],
+    target: AutoMatchTarget,
+  ): ConnectGoogleResourceDto | undefined {
+    const valid = resources.filter((resource): resource is { id: string; name?: string } => Boolean(resource.id));
+    const domainMatches = target.domain
+      ? valid.filter((resource) => normalizedDomain(resource.id) === target.domain)
+      : [];
+    const selected = domainMatches.length === 1 ? domainMatches[0] : valid.length === 1 ? valid[0] : undefined;
+    return selected
+      ? {
+          provider: 'google_search_console',
+          resourceId: selected.id,
+          resourceName: selected.name,
+          siteUrl: selected.id.startsWith('http') ? selected.id : undefined,
+        }
+      : undefined;
+  }
+
+  private matchGbp(
+    resources: GoogleDiscoveryResponseDto['gbp'],
+    target: AutoMatchTarget,
+  ): ConnectGoogleResourceDto | undefined {
+    const valid = resources.filter((resource): resource is { id: string; name?: string; parentAccount?: string } => Boolean(resource.id));
+    const matched = this.uniqueNameMatch(valid, target.names);
+    const selected = matched ?? (valid.length === 1 ? valid[0] : undefined);
+    return selected
+      ? {
+          provider: 'google_business_profile',
+          resourceId: selected.id,
+          resourceName: selected.name,
+          parentAccount: selected.parentAccount,
+        }
+      : undefined;
+  }
+
+  private uniqueNameMatch<T extends { name?: string }>(resources: T[], names: readonly string[]): T | undefined {
+    const targets = names.map(normalizedBusinessName).filter(Boolean);
+    const exact = resources.filter((resource) => targets.includes(normalizedBusinessName(resource.name)));
+    if (exact.length === 1) return exact[0];
+    const partial = resources.filter((resource) => {
+      const name = normalizedBusinessName(resource.name);
+      return name.length >= 4 && targets.some((target) => target.includes(name) || name.includes(target));
+    });
+    return partial.length === 1 ? partial[0] : undefined;
   }
 
   private async discoverGbp(token: string) {

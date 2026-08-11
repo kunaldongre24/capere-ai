@@ -21,7 +21,7 @@ export class GhlOauthController {
 
   @Get('callback')
   @Public()
-  callback(@Query('state') state: string, @Query('code') code: string) {
+  callback(@Query('state') state: string | undefined, @Query('code') code: string | undefined) {
     return this.oauth.completeAuthorization(state, code);
   }
 }

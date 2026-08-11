@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GoogleService } from '../src/integrations/google/google.service';
+import {
+  GoogleService,
+  normalizedBusinessName,
+  normalizedDomain,
+} from '../src/integrations/google/google.service';
 import type { GoogleAdapter } from '../src/integrations/google/google.adapter';
 import type { GoogleTokenService } from '../src/integrations/google/google-token.service';
 import { ProviderAdapterError } from '../src/integrations/provider-adapter';
@@ -18,10 +22,18 @@ function serviceWith(getJson: GoogleAdapter['getJson']) {
     google,
     {} as OutboxService,
     tokens,
+    {} as never,
+    {} as never,
   );
 }
 
 describe('GoogleService resource discovery', () => {
+  it('normalizes GHL websites, Search Console domains, and business names for matching', () => {
+    expect(normalizedDomain('https://www.CapereAI.com/services')).toBe('capereai.com');
+    expect(normalizedDomain('sc-domain:capereai.com')).toBe('capereai.com');
+    expect(normalizedBusinessName('Capere AI, LLC')).toBe('capere ai llc');
+  });
+
   it('returns GA4 and GSC resources when GBP is rate limited', async () => {
     const getJson = vi.fn(async (url: string) => {
       if (url.includes('analyticsadmin')) {

@@ -14,6 +14,7 @@ export interface AppConfig {
   readonly port: number;
   readonly logLevel: Env['LOG_LEVEL'];
   readonly corsOrigins: readonly string[];
+  readonly webUrl: string;
 
   readonly database: {
     readonly url: string;
@@ -213,6 +214,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     port: env.PORT,
     logLevel: env.LOG_LEVEL,
     corsOrigins: Object.freeze(env.CORS_ORIGINS),
+    webUrl: env.APP_WEB_URL.replace(/\/$/, ''),
 
     database: Object.freeze({
       url: env.DATABASE_URL,

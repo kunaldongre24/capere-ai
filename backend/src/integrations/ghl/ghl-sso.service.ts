@@ -81,22 +81,31 @@ export class GhlSsoService {
       );
     }
 
-    const location = await this.database.db
-      .selectFrom('capere.ghl_locations as l')
-      .innerJoin('capere.organizations as o', 'o.id', 'l.organization_id')
-      .innerJoin('capere.integrations as i', (join) =>
-        join
-          .onRef('i.organization_id', '=', 'l.organization_id')
-          .onRef('i.ghl_location_id', '=', 'l.id')
-          .on('i.provider', '=', 'go_high_level')
-          .on('i.status', '=', 'connected'),
-      )
-      .select(['l.organization_id', 'o.status'])
-      .where('l.ghl_location_id', '=', locationId)
-      .where('o.status', '=', 'active')
-      .executeTakeFirst();
+    // Future-install callbacks are delivered by GoHighLevel independently of
+    // the embedded page load. The iframe can therefore reach SSO a moment
+    // before the callback has committed the location and integration rows.
+    // Allow that normal propagation window to settle before rejecting access.
+    let location: { organization_id: string; status: string } | undefined;
+    for (let attempt = 0; attempt < 4 && !location; attempt += 1) {
+      location = await this.database.db
+        .selectFrom('capere.ghl_locations as l')
+        .innerJoin('capere.organizations as o', 'o.id', 'l.organization_id')
+        .innerJoin('capere.integrations as i', (join) =>
+          join
+            .onRef('i.organization_id', '=', 'l.organization_id')
+            .onRef('i.ghl_location_id', '=', 'l.id')
+            .on('i.provider', '=', 'go_high_level')
+            .on('i.status', '=', 'connected'),
+        )
+        .select(['l.organization_id', 'o.status'])
+        .where('l.ghl_location_id', '=', locationId)
+        .where('o.status', '=', 'active')
+        .executeTakeFirst();
+      if (!location && attempt < 3) await new Promise((resolve) => setTimeout(resolve, 750));
+    }
 
     if (!location) {
+      this.logger.warn({ ghlLocationId: locationId }, 'GHL SSO location is not connected');
       throw AppException.forbidden(
         ErrorCode.INTEGRATION_NOT_CONNECTED,
         'This GoHighLevel sub-account is not connected to Capere',

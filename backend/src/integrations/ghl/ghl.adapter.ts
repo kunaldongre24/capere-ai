@@ -23,7 +23,14 @@ export interface GhlLocation {
   readonly id: string;
   readonly name?: string;
   readonly timezone?: string;
+  readonly website?: string;
+  readonly googlePlacesId?: string;
 }
+
+type GhlLocationSearchResponse = {
+  readonly locations?: readonly GhlLocation[];
+  readonly meta?: { readonly total?: number; readonly nextPageUrl?: string | null };
+};
 
 export type GhlErrorKind = 'unauthorized' | 'rate_limited' | 'timeout' | 'unavailable' | 'invalid';
 
@@ -119,7 +126,15 @@ export class GhlAdapter {
         response.status,
       );
     }
-    let body: { location?: { id?: string; name?: string; timezone?: string } };
+    let body: {
+      location?: {
+        id?: string;
+        name?: string;
+        timezone?: string;
+        website?: string;
+        social?: { googlePlacesId?: string };
+      };
+    };
     try {
       body = (await response.json()) as typeof body;
     } catch {
@@ -135,7 +150,52 @@ export class GhlAdapter {
         'invalid',
       );
     }
-    return { id: location.id, name: location.name, timezone: location.timezone };
+    return {
+      id: location.id,
+      name: location.name,
+      timezone: location.timezone,
+      website: location.website,
+      googlePlacesId: location.social?.googlePlacesId,
+    };
+  }
+
+  async listCompanyLocations(credentials: GhlCredentials, companyId: string): Promise<GhlLocation[]> {
+    const locations: GhlLocation[] = [];
+    let skip = 0;
+    const limit = 100;
+    for (;;) {
+      const page = await this.getJson<GhlLocationSearchResponse>(credentials, '/locations/search', {
+        companyId,
+        limit,
+        skip,
+      });
+      const rows = (page.locations ?? []).filter((location) => Boolean(location.id));
+      locations.push(...rows);
+      skip += rows.length;
+      const total = page.meta?.total;
+      if (rows.length === 0 || rows.length < limit || (total !== undefined && skip >= total)) break;
+    }
+    return locations;
+  }
+
+  async locationToken(
+    credentials: GhlCredentials,
+    companyId: string,
+    locationId: string,
+  ): Promise<GhlTokenSet> {
+    const token = await this.postJson<GhlTokenSet>(credentials, '/oauth/locationToken', {
+      companyId,
+      locationId,
+    });
+    if (!token.access_token || !token.expires_in) {
+      throw new GhlAdapterError('GoHighLevel returned an incomplete location token', 'unavailable');
+    }
+    return {
+      ...token,
+      locationId: token.locationId ?? locationId,
+      companyId: token.companyId ?? companyId,
+      userType: token.userType ?? 'Location',
+    };
   }
 
   async getJson<T>(

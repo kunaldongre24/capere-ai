@@ -106,4 +106,46 @@ describe('GHL OAuth', () => {
     );
     expect(exchangeCode).not.toHaveBeenCalled();
   });
+
+  it('accepts a code-only agency installation callback', async () => {
+    const token = {
+      access_token: 'access',
+      refresh_token: 'refresh',
+      expires_in: 86_400,
+      locationId: 'location-agency-install',
+      userType: 'Location',
+    };
+    const exchangeCode = vi.fn().mockResolvedValue(token);
+    const installGhlOauth = vi.fn().mockResolvedValue({ id: 'integration-agency-install' });
+    const service = new GhlOauthService(
+      database(),
+      crypto,
+      {
+        redirectUri: 'https://api.capereai.com/api/v1/integrations/crm/callback',
+        scopes: [],
+        authorizationUrl: vi.fn(),
+        exchangeCode,
+      } as unknown as GhlAdapter,
+      { installGhlOauth } as unknown as IntegrationService,
+    );
+
+    await expect(service.completeAuthorization(undefined, 'agency-code')).resolves.toEqual({
+      id: 'integration-agency-install',
+    });
+    expect(exchangeCode).toHaveBeenCalledWith('agency-code');
+    expect(installGhlOauth).toHaveBeenCalledWith(token);
+  });
+
+  it('rejects a callback without an authorization code', async () => {
+    const service = new GhlOauthService(
+      database(),
+      crypto,
+      { exchangeCode: vi.fn() } as unknown as GhlAdapter,
+      { installGhlOauth: vi.fn() } as unknown as IntegrationService,
+    );
+
+    await expect(service.completeAuthorization(undefined, undefined)).rejects.toThrow(
+      'OAuth authorization code is required',
+    );
+  });
 });

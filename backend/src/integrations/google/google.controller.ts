@@ -1,10 +1,12 @@
-import { Controller, Get, Post, Query, Body } from '@nestjs/common';
+import { Controller, Get, Post, Query, Body, Inject, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentOrg, CurrentUser, Public, Roles } from '../../auth';
 import type { AuthenticatedUser } from '../../auth/jwt-verifier.service';
 import { ConnectGoogleResourceDto, GoogleDiscoveryResponseDto } from './google.dto';
 import { GoogleService } from './google.service';
 import { GoogleSyncService } from './google-sync.service';
+import { APP_CONFIG, type AppConfig } from '../../shared/config';
 
 @ApiTags('google-integrations')
 @ApiBearerAuth('supabase-jwt')
@@ -13,6 +15,7 @@ export class GoogleController {
   constructor(
     private readonly google: GoogleService,
     private readonly syncs: GoogleSyncService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   @Get('authorize')
@@ -26,8 +29,18 @@ export class GoogleController {
 
   @Get('callback')
   @Public()
-  async callback(@Query('state') state: string, @Query('code') code: string) {
-    return this.google.completeAuthorization(state, code);
+  async callback(
+    @Query('state') state: string,
+    @Query('code') code: string,
+    @Res() response: Response,
+  ) {
+    const result = await this.google.completeAuthorization(state, code);
+    const query = new URLSearchParams({
+      google: 'connected',
+      linked: String(result.connected.length),
+      unmatched: String(result.unmatched.length),
+    });
+    return response.redirect(302, `${this.config.webUrl}/integrations?${query.toString()}`);
   }
 
   @Post('resources')

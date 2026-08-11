@@ -41,12 +41,23 @@ export class GhlOauthService {
     return this.adapter.authorizationUrl(state);
   }
 
-  async completeAuthorization(state: string, code: string) {
-    if (!state || !code)
+  async completeAuthorization(state: string | undefined, code: string | undefined) {
+    if (!code)
       throw AppException.badRequest(
         ErrorCode.VALIDATION_FAILED,
-        'OAuth state and authorization code are required',
+        'OAuth authorization code is required',
       );
+    // Agency-wide and automatic future installations are initiated by
+    // GoHighLevel, so they do not pass through beginAuthorization() and may
+    // legitimately return without Capere's state parameter.
+    if (!state) {
+      try {
+        const token = await this.adapter.exchangeCode(code);
+        return await this.integrations.installGhlOauth(token);
+      } catch (error) {
+        return this.handleCompletionError(error);
+      }
+    }
     const hash = createHash('sha256').update(state).digest('hex');
     const oauthState = await this.database.transaction(async (trx) => {
       const row = await trx
@@ -74,13 +85,17 @@ export class GhlOauthService {
       const token = await this.adapter.exchangeCode(code);
       return await this.integrations.connectGhlOauth(oauthState.organization_id, token);
     } catch (error) {
-      if (error instanceof GhlAdapterError && error.kind === 'rate_limited')
-        throw AppException.tooManyRequests('GoHighLevel is rate limiting OAuth requests');
-      if (error instanceof AppException) throw error;
-      throw AppException.badRequest(
-        ErrorCode.INTEGRATION_ERROR,
-        'GoHighLevel authorization could not be completed',
-      );
+      return this.handleCompletionError(error);
     }
+  }
+
+  private handleCompletionError(error: unknown): never {
+    if (error instanceof GhlAdapterError && error.kind === 'rate_limited')
+      throw AppException.tooManyRequests('GoHighLevel is rate limiting OAuth requests');
+    if (error instanceof AppException) throw error;
+    throw AppException.badRequest(
+      ErrorCode.INTEGRATION_ERROR,
+      'GoHighLevel authorization could not be completed',
+    );
   }
 }
