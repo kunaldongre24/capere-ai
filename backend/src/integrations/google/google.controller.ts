@@ -68,7 +68,14 @@ export class GoogleController {
   discover(
     @CurrentOrg() organizationId: string,
     @Query('authorizationId') authorizationId: string,
+    @Query('provider') provider: string | undefined,
   ) {
+    if (
+      provider === 'google_analytics_4' ||
+      provider === 'google_search_console' ||
+      provider === 'google_business_profile'
+    )
+      return this.google.discoverResourcesFor(organizationId, authorizationId, provider);
     return this.google.discoverResources(organizationId, authorizationId);
   }
 

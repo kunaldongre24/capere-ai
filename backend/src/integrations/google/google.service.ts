@@ -355,6 +355,60 @@ export class GoogleService {
     };
   }
 
+  async discoverResourcesFor(
+    organizationId: string,
+    authorizationId: string,
+    provider: 'google_analytics_4' | 'google_search_console' | 'google_business_profile',
+  ): Promise<GoogleDiscoveryResponseDto> {
+    const token = await this.tokens.accessToken(organizationId, authorizationId);
+    if (provider === 'google_analytics_4') {
+      const ga4 = await this.discoverProvider('ga4', () =>
+        this.google.getJson<{
+          accountSummaries?: Array<{
+            propertySummaries?: Array<{ property?: string; displayName?: string }>;
+          }>;
+        }>('https://analyticsadmin.googleapis.com/v1alpha/accountSummaries', token),
+      );
+      return {
+        ga4: (ga4.value?.accountSummaries ?? []).flatMap((account) =>
+          (account.propertySummaries ?? []).map((property) => ({
+            id: property.property,
+            name: property.displayName,
+          })),
+        ),
+        gsc: [],
+        gbp: [],
+        warnings: ga4.warning ? [ga4.warning] : [],
+      };
+    }
+    if (provider === 'google_search_console') {
+      const gsc = await this.discoverProvider('gsc', () =>
+        this.google.getJson<{
+          siteEntry?: Array<{ siteUrl?: string; permissionLevel?: string }>;
+        }>('https://www.googleapis.com/webmasters/v3/sites', token),
+      );
+      return {
+        ga4: [],
+        gsc: (gsc.value?.siteEntry ?? []).map((site) => ({
+          id: site.siteUrl,
+          name: site.siteUrl,
+          permission: site.permissionLevel,
+        })),
+        gbp: [],
+        warnings: gsc.warning ? [gsc.warning] : [],
+      };
+    }
+    const gbp = await this.discoverProvider('gbp', () => this.discoverGbp(token));
+    return {
+      ga4: [],
+      gsc: [],
+      gbp: gbp.value?.resources ?? [],
+      warnings: [gbp.warning, ...(gbp.value?.warnings ?? [])].filter(
+        (warning): warning is GoogleDiscoveryWarningDto => warning !== undefined,
+      ),
+    };
+  }
+
   async autoConnectResources(organizationId: string, authorizationId: string) {
     const [resources, target] = await Promise.all([
       this.discoverResources(organizationId, authorizationId),

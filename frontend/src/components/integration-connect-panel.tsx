@@ -16,6 +16,7 @@ function GoogleConnectButton({ provider, label, embedded }: { provider: string; 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [authorized, setAuthorized] = useState(false);
   const [authorizationId, setAuthorizationId] = useState<string | null>(null);
   const [options, setOptions] = useState<Array<{ id: string; name?: string; parentAccount?: string }>>([]);
   const [selected, setSelected] = useState('');
@@ -24,16 +25,19 @@ function GoogleConnectButton({ provider, label, embedded }: { provider: string; 
     const response = await fetch('/api/capere/integrations/google/connection-status');
     const body = response.ok ? await response.json() : null;
     const status = body?.data;
+    setAuthorized(Boolean(status?.authorized));
     const isConnected = (status?.integrations ?? []).some((item: { provider?: string; status?: string }) => item.status === 'connected' && item.provider === provider);
     setConnected(isConnected);
     setAuthorizationId(status?.authorizationId ?? null);
     if (status?.authorizationId && !isConnected) {
-      const resourcesResponse = await fetch(`/api/capere/integrations/google/available-resources?authorizationId=${encodeURIComponent(status.authorizationId)}`);
+      const resourcesResponse = await fetch(`/api/capere/integrations/google/available-resources?authorizationId=${encodeURIComponent(status.authorizationId)}&provider=${encodeURIComponent(provider)}`);
       const resourcesBody = resourcesResponse.ok ? await resourcesResponse.json() : null;
       const key = provider === 'google_analytics_4' ? 'ga4' : provider === 'google_search_console' ? 'gsc' : 'gbp';
       const discovered = (resourcesBody?.data?.[key] ?? []).filter((item: { id?: string }) => Boolean(item.id));
       setOptions(discovered);
       setSelected((current) => current || discovered[0]?.id || '');
+      const warning = resourcesBody?.data?.warnings?.[0]?.message;
+      setError(warning ?? (discovered.length === 0 ? `No accessible ${label} resources were found in this Google account.` : null));
     } else if (isConnected) setOptions([]);
     return status;
   };
@@ -101,7 +105,7 @@ function GoogleConnectButton({ provider, label, embedded }: { provider: string; 
     } finally { setLoading(false); }
   }
 
-  return <>{connected ? <span className="badge">Connected</span> : options.length ? <div><select value={selected} onChange={(event) => setSelected(event.target.value)} aria-label={`Choose ${label} resource`}>{options.map((option) => <option key={option.id} value={option.id}>{option.name || option.id}</option>)}</select><button className="btn" type="button" onClick={linkSelected} disabled={loading || !selected}>{loading ? 'Linking…' : `Link ${label}`}</button></div> : <button className="btn" type="button" onClick={connect} disabled={loading}>{loading ? 'Waiting for Google…' : `Connect ${label}`}</button>}{error && <p className="error-text" role="alert">{error}</p>}</>;
+  return <>{connected ? <span className="badge">Connected</span> : options.length ? <div><select value={selected} onChange={(event) => setSelected(event.target.value)} aria-label={`Choose ${label} resource`}>{options.map((option) => <option key={option.id} value={option.id}>{option.name || option.id}</option>)}</select><button className="btn" type="button" onClick={linkSelected} disabled={loading || !selected}>{loading ? 'Linking…' : `Link ${label}`}</button></div> : authorized ? <button className="btn" type="button" onClick={() => void refreshStatus()} disabled={loading}>{loading ? 'Checking…' : `Retry ${label} discovery`}</button> : <button className="btn" type="button" onClick={connect} disabled={loading}>{loading ? 'Waiting for Google…' : `Connect ${label}`}</button>}{error && <p className="error-text" role="alert">{error}</p>}</>;
 }
 
 export function IntegrationConnectPanel({ embedded = false }: { embedded?: boolean }) {
