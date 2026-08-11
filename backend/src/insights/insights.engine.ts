@@ -88,6 +88,12 @@ export class InsightsEngine {
 
     let persisted = 0;
     for (const { generator, drafts } of batches) {
+      // Integration health is a complete snapshot of the organization's
+      // current provider states. Resolve warnings that are no longer present
+      // instead of leaving a recovered connection looking broken.
+      if (generator.name === 'integration_health') {
+        await this.dismissResolvedIntegrationInsights(organizationId, drafts);
+      }
       for (const draft of drafts) {
         const created = await this.persist(organizationId, generator.name, draft, event?.id);
         if (created) persisted += 1;
@@ -95,6 +101,21 @@ export class InsightsEngine {
     }
 
     return persisted;
+  }
+
+  private async dismissResolvedIntegrationInsights(
+    organizationId: string,
+    drafts: InsightDraft[],
+  ): Promise<void> {
+    const activeKeys = drafts.map((draft) => draft.dedupeKey);
+    let query = this.database.db
+      .updateTable('capere.insights')
+      .set({ status: 'dismissed', updated_at: new Date() })
+      .where('organization_id', '=', organizationId)
+      .where('source_generator', '=', 'integration_health')
+      .where('status', '=', 'active');
+    if (activeKeys.length > 0) query = query.where('dedupe_key', 'not in', activeKeys);
+    await query.execute();
   }
 
   /**
