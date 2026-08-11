@@ -16,6 +16,7 @@ import type {
 } from './google.dto';
 
 const OAUTH_TTL_MS = 10 * 60_000;
+const CMO_RETURN_SCOPE = 'capere:return:cmo';
 
 type GoogleResourceProvider = 'ga4' | 'gsc' | 'gbp';
 
@@ -55,7 +56,11 @@ export class GoogleService {
     private readonly ghlTokens: GhlTokenService,
   ) {}
 
-  async beginAuthorization(organizationId: string, userId: string | undefined): Promise<string> {
+  async beginAuthorization(
+    organizationId: string,
+    userId: string | undefined,
+    returnTo?: string,
+  ): Promise<string> {
     const state = randomBytes(32).toString('base64url');
     const verifier = randomBytes(48).toString('base64url');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
@@ -76,6 +81,7 @@ export class GoogleService {
           'https://www.googleapis.com/auth/analytics.readonly',
           'https://www.googleapis.com/auth/webmasters.readonly',
           'https://www.googleapis.com/auth/business.manage',
+          ...(returnTo === 'cmo' ? [CMO_RETURN_SCOPE] : []),
         ],
         expires_at: expiresAt,
         consumed_at: null,
@@ -146,13 +152,20 @@ export class GoogleService {
           `authorization:${authorizationId}`,
         ),
         key_version: this.crypto.keyVersion,
-        scopes: token.scope?.split(' ') ?? row.requested_scopes,
+        scopes: (token.scope?.split(' ') ?? row.requested_scopes).filter(
+          (scope) => scope !== CMO_RETURN_SCOPE,
+        ),
         expires_at: new Date(Date.now() + token.expires_in * 1_000),
         metadata: JSON.stringify({}),
       })
       .execute();
     const automatic = await this.autoConnectResources(row.organization_id, authorizationId);
-    return { organizationId: row.organization_id, authorizationId, ...automatic };
+    return {
+      organizationId: row.organization_id,
+      authorizationId,
+      returnTo: row.requested_scopes.includes(CMO_RETURN_SCOPE) ? 'cmo' : 'integrations',
+      ...automatic,
+    };
   }
 
   async connectResource(

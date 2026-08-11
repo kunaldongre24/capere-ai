@@ -2,6 +2,7 @@ import { EmbeddedModule } from '@/components/embedded-module';
 import { CmoTaskQueue } from '@/components/cmo-task-queue';
 import { AskCmoChat } from '@/components/ask-cmo-chat';
 import { capereFetch, type Envelope } from '@/lib/api';
+import { IntegrationConnectPanel } from '@/components/integration-connect-panel';
 
 const sections = [
   ['Morning Brief', 'brief'],
@@ -10,6 +11,7 @@ const sections = [
   ['Marketing Advice', 'advice'],
   ['Tasks', 'tasks'],
   ['Ask CMO', 'ask'],
+  ['Integrations', 'integrations'],
 ] as const;
 type Metric = {
   metric_name: string;
@@ -140,7 +142,9 @@ export default async function CmoPage({
     active: view === key,
   }));
   let content: React.ReactNode;
-  if (view === 'insights')
+  if (view === 'integrations')
+    content = <IntegrationConnectPanel embedded />;
+  else if (view === 'insights')
     content = (
       <div className="cmo-layout">
         <div className="grid grid-3">

@@ -23,8 +23,11 @@ export class GoogleController {
   async authorize(
     @CurrentOrg() organizationId: string,
     @CurrentUser() user: AuthenticatedUser | undefined,
+    @Query('returnTo') returnTo: string | undefined,
   ) {
-    return { authorizationUrl: await this.google.beginAuthorization(organizationId, user?.id) };
+    return {
+      authorizationUrl: await this.google.beginAuthorization(organizationId, user?.id, returnTo),
+    };
   }
 
   @Get('callback')
@@ -40,7 +43,8 @@ export class GoogleController {
       linked: String(result.connected.length),
       unmatched: String(result.unmatched.length),
     });
-    return response.redirect(302, `${this.config.webUrl}/integrations?${query.toString()}`);
+    const destination = result.returnTo === 'cmo' ? '/cmo?view=integrations&' : '/integrations?';
+    return response.redirect(302, `${this.config.webUrl}${destination}${query.toString()}`);
   }
 
   @Post('resources')
