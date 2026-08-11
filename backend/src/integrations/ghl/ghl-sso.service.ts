@@ -17,6 +17,8 @@ type GhlUserContext = {
 };
 
 type SupabaseGenerateLinkResponse = {
+  id?: string;
+  email?: string;
   hashed_token?: string;
   user?: { id?: string; email?: string };
   msg?: string;
@@ -95,7 +97,9 @@ export class GhlSsoService {
     }
 
     const generated = await this.generateMagicLink(email, context.userName, ghlUserId);
-    const userId = generated.user?.id;
+    // GoTrue currently returns the generated user fields at the top level.
+    // Keep the nested fallback for compatibility with older/self-hosted builds.
+    const userId = generated.id ?? generated.user?.id;
     const tokenHash = generated.hashed_token;
     if (!userId || !tokenHash) {
       this.logger.error('Supabase did not return a user and hashed token for GHL SSO');
