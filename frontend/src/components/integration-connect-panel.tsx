@@ -17,25 +17,43 @@ function GoogleConnectButton({ provider, label, embedded }: { provider: string; 
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
 
-  useEffect(() => {
-    fetch('/api/capere/integrations').then((r) => r.ok ? r.json() : null).then((body) => {
+  const refreshStatus = () => fetch('/api/capere/integrations').then((r) => r.ok ? r.json() : null).then((body) => {
       setConnected((body?.data ?? []).some((item: { provider?: string; status?: string }) => item.status === 'connected' && item.provider === provider));
     }).catch(() => undefined);
+
+  useEffect(() => {
+    refreshStatus();
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin === window.location.origin && event.data?.message === 'CAPERE_GOOGLE_OAUTH_COMPLETE') {
+        setLoading(false);
+        refreshStatus();
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
   }, [provider]);
 
   async function connect() {
     setLoading(true); setError(null);
+    const popup = embedded ? window.open('about:blank', 'capere-google-oauth', 'popup,width=640,height=760') : null;
+    if (embedded && !popup) {
+      setError('Allow pop-ups for Capere to connect Google securely outside the GoHighLevel iframe.');
+      setLoading(false);
+      return;
+    }
     try {
       const response = await fetch(`/api/capere/integrations/google/authorize${embedded ? '?returnTo=cmo' : ''}`);
       const body = await response.json();
       if (!response.ok || !body?.data?.authorizationUrl) throw new Error(body?.error?.message ?? 'Unable to start Google authorization');
-      window.location.assign(body.data.authorizationUrl);
+      if (popup) popup.location.href = body.data.authorizationUrl;
+      else window.location.assign(body.data.authorizationUrl);
     } catch (cause) {
+      popup?.close();
       setError(cause instanceof Error ? cause.message : 'Unable to start Google authorization'); setLoading(false);
     }
   }
 
-  return <>{connected ? <span className="badge">Connected automatically</span> : <button className="btn" type="button" onClick={connect} disabled={loading}>{loading ? 'Connecting…' : `Connect ${label}`}</button>}{error && <p className="error-text" role="alert">{error}</p>}</>;
+  return <>{connected ? <span className="badge">Connected automatically</span> : <button className="btn" type="button" onClick={connect} disabled={loading}>{loading ? 'Waiting for Google…' : `Connect ${label}`}</button>}{error && <p className="error-text" role="alert">{error}</p>}</>;
 }
 
 export function IntegrationConnectPanel({ embedded = false }: { embedded?: boolean }) {

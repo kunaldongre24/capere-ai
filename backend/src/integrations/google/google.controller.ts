@@ -43,7 +43,7 @@ export class GoogleController {
       linked: String(result.connected.length),
       unmatched: String(result.unmatched.length),
     });
-    const destination = result.returnTo === 'cmo' ? '/cmo?view=integrations&' : '/integrations?';
+    const destination = result.returnTo === 'cmo' ? '/oauth/google-complete?' : '/integrations?';
     return response.redirect(302, `${this.config.webUrl}${destination}${query.toString()}`);
   }
 
