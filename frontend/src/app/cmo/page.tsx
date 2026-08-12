@@ -3,12 +3,14 @@ import { CmoTaskQueue } from '@/components/cmo-task-queue';
 import { AskCmoChat } from '@/components/ask-cmo-chat';
 import { capereFetch, type Envelope } from '@/lib/api';
 import { IntegrationConnectPanel } from '@/components/integration-connect-panel';
+import { BusinessProfileDashboard, type BusinessProfileData } from '@/components/business-profile-dashboard';
 
 const sections = [
   ['Morning Brief', 'brief'],
   ['Insights', 'insights'],
   ['Revenue Opportunities', 'revenue'],
   ['Business Activity', 'activity'],
+  ['Business Profile', 'business'],
   ['Marketing Advice', 'advice'],
   ['Tasks', 'tasks'],
   ['Ask CMO', 'ask'],
@@ -141,6 +143,7 @@ export default async function CmoPage({
   const pipeline = (d.pipeline && typeof d.pipeline === 'object' ? d.pipeline : { connected:false, returned:0, total:0, pipelineValue:0, byStatus:{}, error:null }) as Pipeline;
   const performance = (d.performance && typeof d.performance === 'object' ? d.performance : { periodDays:7, currentSessions:0, previousSessions:0, currentSearchClicks:0, currentSearchImpressions:0, searchAveragePosition:null }) as Performance;
   const operations = (d.operations && typeof d.operations === 'object' ? d.operations : null) as Operations|null;
+  const businessProfile = (d.businessProfile && typeof d.businessProfile === 'object' ? d.businessProfile : null) as BusinessProfileData|null;
   const latest = (name: string) => metrics.find((m) => m.metric_name === name)?.metric_value;
   const activeTasks = tasks.filter((t) => ['draft', 'approved', 'executing'].includes(t.status));
   const revenueRecs = recommendations.filter((r) => r.category === 'revenue');
@@ -157,6 +160,8 @@ export default async function CmoPage({
   let content: React.ReactNode;
   if (view === 'integrations')
     content = <IntegrationConnectPanel embedded />;
+  else if (view === 'business')
+    content = <BusinessProfileDashboard profile={businessProfile} />;
   else if (view === 'insights')
     content = (
       <div className="cmo-layout">

@@ -250,11 +250,12 @@ export class DashboardService {
       this.database.db.selectFrom('capere.automation_actions').select(['id','kind','status','title','payload','error','approved_at','executed_at','created_at']).where('organization_id','=',organizationId).orderBy('created_at','desc').limit(30).execute(),
       this.database.db.selectFrom('capere.integrations').select(['provider','status','last_sync_at','last_error']).where('organization_id','=',organizationId).execute(),
     ]);
-    const [pipeline, operations] = await Promise.all([
+    const [pipeline, operations, businessProfile] = await Promise.all([
       this.pipelineSummary(organizationId),
       this.ghlBusiness ? this.ghlBusiness.summary(organizationId) : Promise.resolve(null),
+      this.ghlReputation ? this.ghlReputation.summary(organizationId) : Promise.resolve(null),
     ]);
-    return { generatedAt:new Date().toISOString(), metrics, seoMetrics, performance, insights, recommendations, briefs, tasks, integrations, pipeline, operations, evidenceComplete:metrics.length>0||seoMetrics.length>0||insights.length>0||recommendations.length>0||pipeline.connected||Boolean(operations?.connected) };
+    return { generatedAt:new Date().toISOString(), metrics, seoMetrics, performance, insights, recommendations, briefs, tasks, integrations, pipeline, operations, businessProfile, evidenceComplete:metrics.length>0||seoMetrics.length>0||insights.length>0||recommendations.length>0||pipeline.connected||Boolean(operations?.connected) };
   }
 
   private cmoPerformanceFromSource(rows: Array<{ provider: string; metric_date: Date | string; dimensions: unknown; metrics: unknown }>) {

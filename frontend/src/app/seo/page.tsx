@@ -9,7 +9,6 @@ const sections = [
   ['Website health', 'technical'],
   ['Search keywords', 'keywords'],
   ['Competitors', 'competitors'],
-  ['Business Profile', 'business'],
   ['Customer Reviews', 'gbp'],
   ['Recommendations', 'recommendations'],
   ['History', 'history'],
@@ -177,13 +176,6 @@ const StatusList = ({
   </div>
 );
 
-const RatingTrend = ({ points }: { points: Array<{month:string;averageRating:number;count:number}> }) => {
-  if (points.length < 2) return <p className="muted">A trend will appear after reviews are available across more than one month.</p>;
-  const width=640,height=190,pad=28,step=(width-pad*2)/(points.length-1);
-  const plotted=points.map((point,index)=>({ ...point,x:pad+index*step,y:height-pad-(point.averageRating/5)*(height-pad*2) }));
-  const path=plotted.map((point,index)=>`${index?'L':'M'} ${point.x} ${point.y}`).join(' ');
-  return <div className="seo-line-chart profile-trend"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Average customer rating by month"><line x1={pad} y1={height-pad} x2={width-pad} y2={height-pad} className="chart-axis"/><path d={path} className="chart-line"/>{plotted.map((point,index)=><g className="chart-point" key={point.month}><circle cx={point.x} cy={point.y} r="5"><title>{point.month}: {point.averageRating.toFixed(1)} from {point.count} review{point.count===1?'':'s'}</title></circle>{(index===0||index===plotted.length-1||index%Math.max(1,Math.ceil(plotted.length/5))===0)&&<text x={point.x} y={height-5} textAnchor="middle">{new Date(`${point.month}-01T00:00:00Z`).toLocaleDateString(undefined,{month:'short',year:'2-digit'})}</text>}</g>)}</svg></div>;
-};
 
 export default async function SeoPage({
   searchParams,
@@ -502,26 +494,6 @@ export default async function SeoPage({
         {competitors.some((c)=>(c.metrics?.history?.length??0)>1) && <Panel title="Visibility trend" subtitle="Change in estimated search visibility across saved weekly comparisons."><div className="competitor-trend-list">{competitors.filter((c)=>(c.metrics?.history?.length??0)>1).map((c)=>{const history=c.metrics!.history!;const first=history[0].organicTraffic;const last=history.at(-1)!.organicTraffic;const change=first>0?((last-first)/first)*100:null;return <div key={c.domain}><div><strong>{c.name??c.domain}</strong><small>{new Date(history[0].checkedAt).toLocaleDateString()} to {new Date(history.at(-1)!.checkedAt).toLocaleDateString()}</small></div><span className={change===null?'neutral':change>=0?'good':'bad'}>{change===null?'Baseline created':`${change>=0?'+':''}${change.toFixed(1)}%`}</span></div>})}</div></Panel>}
       </div>
     );
-  else if (view === 'business') {
-    const business=localProfile?.business;
-    const profileFields=[business?.name,business?.website,business?.phone,business?.email,business?.address,business?.city,business?.state,business?.postalCode,business?.country,business?.timezone,business?.logoUrl,business?.googlePlacesId];
-    const completed=profileFields.filter(Boolean).length;
-    const completeness=Math.round((completed/profileFields.length)*100);
-    const address=[business?.address,business?.city,business?.state,business?.postalCode,business?.country].filter(Boolean).join(', ');
-    const socialEntries=Object.entries(business?.social??{}).filter(([key,value])=>Boolean(value)&&key!=='googlePlacesId');
-    content=(<div className="grid business-profile-layout">
-      <section className="card business-profile-hero"><div className="business-profile-brand">{business?.logoUrl?<img src={business.logoUrl} alt=""/>:<span>{(business?.name??localProfile?.locationName??'B').slice(0,1).toUpperCase()}</span>}</div><div><div className="eyebrow">GoHighLevel business profile</div><h2>{business?.name??localProfile?.locationName??'Business details'}</h2><p>{address||'Add your complete business address in GoHighLevel so clients see consistent information.'}</p><div className="business-profile-badges"><span className="badge">GHL connected</span><span className={`badge ${business?.googlePlacesId?'good':''}`}>{business?.googlePlacesId?'Google place identified':'Google place not identified'}</span></div></div><div className="profile-score"><strong>{completeness}%</strong><span>Profile complete</span></div></section>
-      <div className="grid grid-3"><Card title="Business details" value={`${completed}/${profileFields.length}`} detail="Important profile fields completed"/><Card title="Customer rating" value={localProfile?.dataAvailable?`${localProfile.averageRating.toFixed(1)}/5`:'—'} detail={localProfile?.dataAvailable?`${localProfile.reviewCount} reviews available`:'Waiting for reputation access'}/><Card title="Review response rate" value={localProfile?.dataAvailable?`${Math.round(localProfile.responseRate*100)}%`:'—'} detail={localProfile?.dataAvailable?`${localProfile.unanswered} reviews awaiting replies`:'Provided through GoHighLevel'}/></div>
-      <div className="business-profile-columns"><Panel title="Business information" subtitle="Details customers use to recognize and contact your business."><div className="business-detail-list">{[
-        ['Website',business?.website],['Phone',business?.phone],['Email',business?.email],['Address',address],['Timezone',business?.timezone],['Google Place ID',business?.googlePlacesId]
-      ].map(([key,value])=><div key={key}><span>{key}</span><strong>{value||'Not provided in GoHighLevel'}</strong></div>)}</div></Panel><Panel title="Profile completeness" subtitle="Complete details help keep your business information consistent."><div className="profile-completeness"><div className="profile-ring" style={{'--score':`${completeness*3.6}deg`} as React.CSSProperties}><strong>{completeness}%</strong></div><div className="profile-checks">{[
-        ['Business identity',Boolean(business?.name&&business?.logoUrl)],['Contact details',Boolean(business?.phone&&business?.email)],['Website',Boolean(business?.website)],['Full address',Boolean(business?.address&&business?.city&&business?.state&&business?.postalCode)],['Google place link',Boolean(business?.googlePlacesId)],['Social profiles',socialEntries.length>0]
-      ].map(([label,ready])=><div key={String(label)} className={ready?'complete':'missing'}><span></span><strong>{label}</strong><small>{ready?'Complete':'Needs attention'}</small></div>)}</div></div></Panel></div>
-      <div className="business-profile-columns"><Panel title="Reputation overview" subtitle="How customer ratings and responses support trust."><div className="rating-summary"><div><strong>{localProfile?.dataAvailable?localProfile.averageRating.toFixed(1):'—'}</strong><span>Average rating</span><small>{localProfile?.reviewCount??0} customer reviews</small></div><div className="rating-bars">{(['5','4','3','2','1'] as const).map(rating=>{const count=localProfile?.ratingDistribution?.[rating]??0;const max=Math.max(...Object.values(localProfile?.ratingDistribution??{}),1);return <div key={rating}><span>{rating} star</span><div><i style={{width:`${(count/max)*100}%`}}/></div><strong>{count}</strong></div>})}</div></div></Panel><Panel title="Connected channels" subtitle="Business links currently available from GoHighLevel."><div className="business-channel-list"><div><strong>Website</strong><span>{business?.website?'Available':'Not provided'}</span></div><div><strong>Google location</strong><span>{business?.googlePlacesId?'Identified':'Not identified'}</span></div>{socialEntries.map(([key,value])=><div key={key}><strong>{key.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase())}</strong><span>{value}</span></div>)}{!socialEntries.length&&<p className="muted">No additional social links were provided by GoHighLevel.</p>}</div></Panel></div>
-      <Panel title="Rating trend" subtitle="Average customer rating across the review history available from GoHighLevel."><RatingTrend points={localProfile?.monthlyTrend??[]}/></Panel>
-      <Panel title="Data coverage" subtitle="A transparent view of what Capere can and cannot access through GoHighLevel."><StatusList items={[{label:'Business identity and contact details',value:business?'Available':'Unavailable',status:business?'good':'warning',detail:'Name, website, address, phone, email, timezone and connected profile references'},{label:'Customer reviews and ratings',value:localProfile?.accessStatus==='available'?'Available':localProfile?.accessStatus==='permission_required'?'Permission needed':'Temporarily unavailable',status:localProfile?.accessStatus==='available'?'good':'warning',detail:'Review count, ratings, comments and response status'},{label:'Google Maps performance',value:'Not provided by GHL',status:'neutral',detail:'Profile views, calls, clicks and direction requests require direct Google API access'},{label:'Google posts, photos and Q&A',value:'Not provided by GHL',status:'neutral',detail:'These profile-management features are outside the current GHL review connection'}]}/></Panel>
-    </div>);
-  }
   else if (view === 'gbp')
     content = (
       <div className="grid">
