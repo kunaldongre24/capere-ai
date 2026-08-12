@@ -25,6 +25,15 @@ export interface GhlLocation {
   readonly timezone?: string;
   readonly website?: string;
   readonly googlePlacesId?: string;
+  readonly email?: string;
+  readonly phone?: string;
+  readonly address?: string;
+  readonly city?: string;
+  readonly state?: string;
+  readonly country?: string;
+  readonly postalCode?: string;
+  readonly logoUrl?: string;
+  readonly social?: Record<string, string>;
 }
 
 type GhlLocationSearchResponse = {
@@ -132,7 +141,16 @@ export class GhlAdapter {
         name?: string;
         timezone?: string;
         website?: string;
-        social?: { googlePlacesId?: string };
+        email?: string;
+        phone?: string;
+        address?: string;
+        city?: string;
+        state?: string;
+        country?: string;
+        postalCode?: string;
+        logoUrl?: string;
+        logo?: string;
+        social?: Record<string, string | undefined>;
       };
     };
     try {
@@ -156,6 +174,19 @@ export class GhlAdapter {
       timezone: location.timezone,
       website: location.website,
       googlePlacesId: location.social?.googlePlacesId,
+      email: location.email,
+      phone: location.phone,
+      address: location.address,
+      city: location.city,
+      state: location.state,
+      country: location.country,
+      postalCode: location.postalCode,
+      logoUrl: location.logoUrl ?? location.logo,
+      social: Object.fromEntries(
+        Object.entries(location.social ?? {}).filter(
+          (entry): entry is [string, string] => Boolean(entry[1]),
+        ),
+      ),
     };
   }
 

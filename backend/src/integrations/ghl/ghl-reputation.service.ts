@@ -47,6 +47,24 @@ export type GhlReputationSummary = {
   reviewCount: number;
   averageRating: number;
   unanswered: number;
+  responseRate: number;
+  ratingDistribution: Record<'1' | '2' | '3' | '4' | '5', number>;
+  monthlyTrend: Array<{ month: string; count: number; averageRating: number }>;
+  business?: {
+    name: string | null;
+    website: string | null;
+    email: string | null;
+    phone: string | null;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    country: string | null;
+    postalCode: string | null;
+    timezone: string | null;
+    logoUrl: string | null;
+    googlePlacesId: string | null;
+    social: Record<string, string>;
+  };
   message?: string;
 };
 
@@ -71,11 +89,45 @@ export class GhlReputationService {
 
     try {
       const credentials = await this.tokens.credentials(organizationId, integration.id);
-      const body = await this.adapter.getJson<GhlReviewsResponse>(
-        credentials,
-        '/reputation/reviews',
-        { locationId: integration.account_id, limit: 100, skip: 0 },
-      );
+      const location = await this.adapter.getLocation(credentials, integration.account_id);
+      const business = {
+        name: location.name ?? integration.account_name ?? null,
+        website: location.website ?? null,
+        email: location.email ?? null,
+        phone: location.phone ?? null,
+        address: location.address ?? null,
+        city: location.city ?? null,
+        state: location.state ?? null,
+        country: location.country ?? null,
+        postalCode: location.postalCode ?? null,
+        timezone: location.timezone ?? null,
+        logoUrl: location.logoUrl ?? null,
+        googlePlacesId: location.googlePlacesId ?? null,
+        social: location.social ?? {},
+      };
+      let body: GhlReviewsResponse;
+      try {
+        body = await this.adapter.getJson<GhlReviewsResponse>(
+          credentials,
+          '/reputation/reviews',
+          { locationId: integration.account_id, limit: 100, skip: 0 },
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '';
+        const permissionRequired = message.includes('401') || message.includes('403');
+        return {
+          ...this.empty(
+            true,
+            permissionRequired
+              ? 'Business details are available through GoHighLevel, but Capere still needs reputation permission to read Google reviews.'
+              : 'Business details are available, but review data is temporarily unavailable from GoHighLevel.',
+            integration.account_id,
+            integration.account_name,
+            permissionRequired ? 'permission_required' : 'temporarily_unavailable',
+          ),
+          business,
+        };
+      }
       const rows = body.reviews ?? body.data ?? [];
       const reviews = rows.map((row, index) => {
         const rating = Number(row.rating ?? row.reviewRating ?? 0);
@@ -91,6 +143,38 @@ export class GhlReputationService {
         };
       });
       const rated = reviews.filter((review) => review.rating > 0);
+      const ratingDistribution: GhlReputationSummary['ratingDistribution'] = {
+        '1': 0,
+        '2': 0,
+        '3': 0,
+        '4': 0,
+        '5': 0,
+      };
+      for (const review of rated) {
+        const rounded = String(Math.min(5, Math.max(1, Math.round(review.rating)))) as keyof typeof ratingDistribution;
+        ratingDistribution[rounded] += 1;
+      }
+      const months = new Map<string, { count: number; ratings: number[] }>();
+      for (const review of reviews) {
+        if (!review.createdAt) continue;
+        const date = new Date(review.createdAt);
+        if (Number.isNaN(date.getTime())) continue;
+        const month = date.toISOString().slice(0, 7);
+        const current = months.get(month) ?? { count: 0, ratings: [] };
+        current.count += 1;
+        if (review.rating > 0) current.ratings.push(review.rating);
+        months.set(month, current);
+      }
+      const monthlyTrend = [...months.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-12)
+        .map(([month, value]) => ({
+          month,
+          count: value.count,
+          averageRating: value.ratings.length
+            ? value.ratings.reduce((sum, rating) => sum + rating, 0) / value.ratings.length
+            : 0,
+        }));
       const reportedTotal = Number(body.total ?? body.meta?.total ?? reviews.length);
       return {
         connected: true,
@@ -106,6 +190,12 @@ export class GhlReputationService {
           ? rated.reduce((sum, review) => sum + review.rating, 0) / rated.length
           : 0,
         unanswered: reviews.filter((review) => !review.replied).length,
+        responseRate: reviews.length
+          ? reviews.filter((review) => review.replied).length / reviews.length
+          : 0,
+        ratingDistribution,
+        monthlyTrend,
+        business,
         message: reviews.length
           ? undefined
           : 'GoHighLevel is connected, but no Google reviews are available for this location yet.',
@@ -144,6 +234,9 @@ export class GhlReputationService {
       reviewCount: 0,
       averageRating: 0,
       unanswered: 0,
+      responseRate: 0,
+      ratingDistribution: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 },
+      monthlyTrend: [],
       message,
     };
   }
