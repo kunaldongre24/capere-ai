@@ -112,7 +112,9 @@ export function IntegrationConnectPanel({ embedded = false, gbpConnected = false
   const searchParams = useSearchParams();
   const linked = Number(searchParams.get('linked') ?? 0);
   const unmatched = Number(searchParams.get('unmatched') ?? 0);
-  const visibleProviders = compact ? providers.filter(([name]) => !['GoHighLevel','DataForSEO'].includes(name)) : providers;
+  const visibleProviders = compact
+    ? providers.filter(([name]) => ['Google Analytics 4', 'Search Console', 'Google Business Profile'].includes(name))
+    : providers;
   return <div className={embedded ? 'cmo-layout' : undefined}>
     {searchParams.get('google') === 'connected' && <div className="card"><strong>Google authorization complete</strong><p className="muted">Capere linked {linked} matching service{linked === 1 ? '' : 's'} automatically{unmatched ? `; ${unmatched} service${unmatched === 1 ? '' : 's'} need a unique matching resource.` : '.'}</p></div>}
     <div className={compact?'integration-strip':'grid grid-3'}>{visibleProviders.map(([name, desc]) => <article className={`card integration-card${compact?' compact':''}`} key={name}><div className="integration-card-header"><div className="integration-logo">{name.slice(0, 2).toUpperCase()}</div><div><h2 className="card-title">{name}</h2>{!compact&&<p className="muted">{desc}</p>}</div></div><div className="integration-card-footer">{name === 'Google Analytics 4' ? <GoogleConnectButton provider="google_analytics_4" label="Analytics" embedded={embedded} /> : name === 'Search Console' ? <GoogleConnectButton provider="google_search_console" label="Search Console" embedded={embedded} /> : name === 'Google Business Profile' ? gbpConnected?<span className="badge good">Connected through GoHighLevel</span>:<GbpConnectButton/> : <span className="badge">Managed by Capere</span>}</div></article>)}</div>
