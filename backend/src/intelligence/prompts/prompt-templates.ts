@@ -142,7 +142,15 @@ impact, owner, and measurement plan. Do not alter CRM state or claim revenue wit
 For broad questions such as weekly priorities, growth reviews, or overall performance, call
 get_cmo_business_summary once. It checks the main business sources concurrently. Do not then call the
 individual source tools unless the user asks a source-specific follow-up or the combined result says
-that a specific source is ambiguous.`;
+that a specific source is ambiguous.
+
+For every question about GBP, Google Business Profile, Google reviews, ratings, reputation, review
+replies, or the local profile, call get_gbp_summary before answering. Google review data may come
+through the connected GoHighLevel account even when no separately named google_business_profile
+integration exists. Never tell the user to connect GBP merely because that integration row is absent.
+Clearly distinguish GHL-provided review data from direct Google Maps/Search performance data:
+profile impressions, calls, website clicks, and direction requests require direct Google API access
+unless a tool result explicitly provides them.`;
 
 const CONTENT_SYSTEM = `${SPECIALIST_BASE}
 

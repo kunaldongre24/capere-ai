@@ -8,6 +8,7 @@ import type { MemoryService } from '../src/intelligence/memory/memory.service';
 import type { PromptRegistryService } from '../src/intelligence/prompts/prompt-registry.service';
 import type { ResponseReviewService } from '../src/intelligence/review/response-review.service';
 import type { FeatureFlagService } from '../src/feature-flags';
+import type { ToolRegistry } from '../src/intelligence/tools/tool-registry';
 
 describe('GenerateChatResponseUseCase', () => {
   it('keeps ephemeral requests process and persistence stateless', async () => {
@@ -75,9 +76,34 @@ describe('GenerateChatResponseUseCase', () => {
       );
     },
   );
+
+  it('preflights GHL-backed review data for GBP questions', async () => {
+    const fixture = makeFixture({ gbpAvailable: true });
+    const result = await fixture.useCase.execute({
+      organizationId: '00000000-0000-0000-0000-000000000001',
+      role: 'owner',
+      capability: 'cmo',
+      message: 'What data do you have about GBP?',
+      ephemeral: true,
+    });
+
+    expect(fixture.toolRegistry.execute).toHaveBeenCalledWith(
+      'get_gbp_summary',
+      JSON.stringify({ days: 30 }),
+      expect.objectContaining({ organizationId: '00000000-0000-0000-0000-000000000001' }),
+    );
+    expect(fixture.execution.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('"reviews":{"count":4'),
+      }),
+    );
+    expect(result.toolResults).toEqual([
+      expect.objectContaining({ toolName: 'get_gbp_summary', ok: true }),
+    ]);
+  });
 });
 
-function makeFixture(options: { reviewEnabled?: boolean } = {}) {
+function makeFixture(options: { reviewEnabled?: boolean; gbpAvailable?: boolean } = {}) {
   const memory = {
     createSession: vi.fn().mockResolvedValue('session-1'),
     assertSessionAccess: vi.fn().mockResolvedValue(undefined),
@@ -141,6 +167,19 @@ function makeFixture(options: { reviewEnabled?: boolean } = {}) {
         ),
       ),
   };
+  const toolRegistry = {
+    has: vi.fn().mockReturnValue(options.gbpAvailable === true),
+    execute: vi.fn().mockResolvedValue({
+      toolName: 'get_gbp_summary',
+      ok: true,
+      output: {
+        connected: true,
+        dataAvailable: true,
+        reviews: { count: 4, averageRating: 4.5, unanswered: 1 },
+      },
+      durationMs: 10,
+    }),
+  };
   const useCase = new GenerateChatResponseUseCase(
     new CapabilityRouter(),
     context as unknown as ContextBuilder,
@@ -149,6 +188,7 @@ function makeFixture(options: { reviewEnabled?: boolean } = {}) {
     execution as unknown as ToolExecutionService,
     reviewer as unknown as ResponseReviewService,
     flags as unknown as FeatureFlagService,
+    toolRegistry as unknown as ToolRegistry,
   );
-  return { useCase, memory, execution, prompts };
+  return { useCase, memory, execution, prompts, toolRegistry };
 }

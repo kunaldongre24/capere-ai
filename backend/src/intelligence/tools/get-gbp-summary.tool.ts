@@ -23,7 +23,7 @@ export interface GbpSummary {
 export class GetGbpSummaryTool implements Tool<Input, GbpSummary>, OnModuleInit {
   readonly name = 'get_gbp_summary';
   readonly description =
-    'Returns Google Business Profile interactions such as map impressions, website clicks, calls, direction requests, and review health.';
+    'Checks local-profile and Google Business Profile data. Always use this tool for questions mentioning GBP, Google Business Profile, Google reviews, ratings, review replies, reputation, or local profile. Review data is normally supplied through GoHighLevel; direct Google authorization is only needed for Maps/Search performance metrics such as impressions, calls, website clicks, and directions.';
   readonly schema = inputSchema;
   readonly permissions = [
     'owner',

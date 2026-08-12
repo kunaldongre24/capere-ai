@@ -129,6 +129,15 @@ export class ContextBuilder {
             .join(', '),
       );
     }
+    if (connected.some((integration) => integration.provider === 'go_high_level')) {
+      integrationLines.push(
+        'GoHighLevel is Capere\'s source for CRM activity and Google review/reputation data. ' +
+          'The absence of a separate google_business_profile integration does NOT mean review data is unavailable. ' +
+          'Use get_gbp_summary to check review count, rating, and unanswered reviews. A direct Google Business Profile ' +
+          'integration is only required for Google Maps/Search performance metrics such as profile impressions, calls, ' +
+          'website clicks, and direction requests.',
+      );
+    }
     if (notConnected.length > 0) {
       integrationLines.push(
         'NOT connected: ' + notConnected.map((i) => `${i.provider} (${i.status})`).join(', '),
@@ -138,7 +147,7 @@ export class ContextBuilder {
       integrationLines.push('No integrations have been connected yet.');
     }
     integrationLines.push(
-      'Do not report metrics from a data source that is not connected. Say what is missing instead.',
+      'Do not report metrics from a data source that is not connected. Check the appropriate tool before saying data is unavailable, because some capabilities are supplied through GoHighLevel rather than a separately named integration.',
     );
     sections.push(`## Data sources\n${integrationLines.join('\n')}`);
 

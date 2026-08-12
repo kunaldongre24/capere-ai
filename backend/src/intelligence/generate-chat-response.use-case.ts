@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import type { OrgRole } from '../shared/database';
 import { FeatureFlag, FeatureFlagService } from '../feature-flags';
 import { AppException, ErrorCode } from '../shared/http';
@@ -9,6 +9,7 @@ import { MemoryService } from './memory/memory.service';
 import { PromptRegistryService } from './prompts/prompt-registry.service';
 import { ResponseReviewService } from './review/response-review.service';
 import type { ToolResult } from './tools/tool.interface';
+import { ToolRegistry } from './tools/tool-registry';
 import { CapabilityRouter, type IntelligenceCapability } from './capability-router.service';
 
 export interface GenerateChatResponseCommand {
@@ -48,6 +49,7 @@ export class GenerateChatResponseUseCase {
     private readonly tools: ToolExecutionService,
     private readonly reviewer: ResponseReviewService,
     private readonly flags: FeatureFlagService,
+    @Optional() private readonly toolRegistry?: ToolRegistry,
   ) {}
 
   async execute(command: GenerateChatResponseCommand): Promise<ChatResponseResult> {
@@ -106,6 +108,22 @@ export class GenerateChatResponseUseCase {
       command.organizationId,
       FeatureFlag.IntelligenceBoundedTools,
     );
+    const preflight =
+      toolsEnabled && this.requiresGbpGrounding(command.message) && this.toolRegistry?.has('get_gbp_summary')
+        ? await this.toolRegistry.execute('get_gbp_summary', JSON.stringify({ days: 30 }), {
+            organizationId: command.organizationId,
+            userId: command.userId,
+            role: command.role,
+            sessionId,
+            agent: policy.agent,
+            signal: command.signal ?? new AbortController().signal,
+          })
+        : null;
+    const liveSourceContext = preflight
+      ? `\n\n## Mandatory live source check\nThe user asked about Google Business Profile, reviews, reputation, ratings, or the local profile. ` +
+        `Capere checked get_gbp_summary before this model call. Treat this result as current evidence and do not infer availability from integration names alone.\n` +
+        `${preflight.ok ? JSON.stringify(preflight.output ?? null) : `The live check failed: ${preflight.error?.message ?? 'unknown error'}`}`
+      : '';
     const result = await this.tools.run({
       organizationId: command.organizationId,
       userId: command.userId,
@@ -113,7 +131,7 @@ export class GenerateChatResponseUseCase {
       sessionId,
       agent: policy.agent,
       taskType: policy.taskType,
-      systemPrompt: `${prompt.content}\n\n${this.context.render(organizationContext, memory)}`,
+      systemPrompt: `${prompt.content}\n\n${this.context.render(organizationContext, memory)}${liveSourceContext}`,
       messages: [
         ...(command.priorMessages ?? []),
         ...history,
@@ -130,6 +148,7 @@ export class GenerateChatResponseUseCase {
       signal: command.signal,
     });
 
+    const groundedToolResults = preflight ? [preflight, ...result.toolResults] : result.toolResults;
     let content = result.content,
       reviewed = false,
       revised = false;
@@ -147,7 +166,7 @@ export class GenerateChatResponseUseCase {
         agent: policy.agent,
         userRequest: command.message,
         draft: content,
-        toolResults: result.toolResults,
+        toolResults: groundedToolResults,
         reflectionPrompt: reviewPrompt.content,
         promptName: reviewPrompt.name,
         promptVersion: reviewPrompt.version,
@@ -177,7 +196,7 @@ export class GenerateChatResponseUseCase {
           exhausted: result.exhausted,
           reviewed,
           revised,
-          sources: [...new Set(result.toolResults.filter((tool) => tool.ok).map((tool) => tool.toolName))],
+          sources: [...new Set(groundedToolResults.filter((tool) => tool.ok).map((tool) => tool.toolName))],
         },
       });
     }
@@ -187,11 +206,17 @@ export class GenerateChatResponseUseCase {
     return {
       content,
       sessionId,
-      toolResults: result.toolResults,
+      toolResults: groundedToolResults,
       modelCalls: result.iterations,
       reviewed,
       revised,
     };
+  }
+
+  private requiresGbpGrounding(message: string): boolean {
+    return /\b(?:gbp|google\s+business(?:\s+profile)?|google\s+reviews?|reviews?|ratings?|reputation|local\s+profile)\b/i.test(
+      message,
+    );
   }
 
   private async persistTranscript(
