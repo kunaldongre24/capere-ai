@@ -416,11 +416,11 @@ export default async function CmoPage({
           <Card label="Website visits" value={String(performance.currentSessions)} detail={`Last ${performance.periodDays} days`} />
           <Card label="Pipeline value" value={pipeline.connected ? pipeline.pipelineValue.toLocaleString(undefined,{style:'currency',currency:'USD',maximumFractionDigits:0}) : '—'} detail={pipeline.connected ? `${pipeline.total} GoHighLevel opportunities` : 'CRM data unavailable'} />
         </div>
+        <Section title="Connected services" subtitle="Your active marketing data connections.">
+          <IntegrationConnectPanel embedded compact gbpConnected={Boolean(businessProfile?.profileConnectionConfirmed)} />
+        </Section>
         <Section title="Morning brief" subtitle="A chronological feed of what changed, why it matters, and what to do next.">
           {feed.length ? <div className="cmo-feed">{feed.map((item) => <article className="cmo-feed-item" key={item.id}><div className={`cmo-feed-avatar ${item.tone}`}>{item.kind==='insight'?'!':item.kind==='recommendation'?'→':'✓'}</div><div className="cmo-feed-card"><div className="cmo-feed-meta"><span>{item.label}</span><time>{new Date(item.date).toLocaleString()}</time></div><h3>{item.title}</h3><p className="cmo-feed-body">{item.body}</p>{item.action&&<div className="cmo-feed-action"><strong>Next step</strong><span>{item.action}</span></div>}<div className="cmo-feed-footer"><span>AI CMO</span><span>Based on connected business data</span></div></div></article>)}</div>:<State title="No updates yet" body="The feed will fill automatically after synchronized metrics and recommendations are available."/>}
-        </Section>
-        <Section title="Connected services" subtitle="Manage the services that supply business and marketing information.">
-          <IntegrationConnectPanel embedded gbpConnected={Boolean(businessProfile?.profileConnectionConfirmed)} />
         </Section>
       </div>
     );
