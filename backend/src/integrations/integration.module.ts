@@ -8,6 +8,7 @@ import { GhlSsoController } from './ghl/ghl-sso.controller';
 import { GhlSsoService } from './ghl/ghl-sso.service';
 import { GhlTokenService } from './ghl/ghl-token.service';
 import { GhlReputationService } from './ghl/ghl-reputation.service';
+import { GhlBusinessSnapshotService } from './ghl/ghl-business-snapshot.service';
 import { CredentialVaultService } from './credential-vault.service';
 import { DataForSeoAdapter } from './dataforseo/dataforseo.adapter';
 import { DataForSeoController } from './dataforseo/dataforseo.controller';
@@ -42,6 +43,7 @@ import { IntegrationService } from './integration.service';
     GhlSsoService,
     GhlTokenService,
     GhlReputationService,
+    GhlBusinessSnapshotService,
     GoogleAdapter,
     GoogleService,
     GoogleTokenService,
@@ -58,6 +60,7 @@ import { IntegrationService } from './integration.service';
     GhlOauthService,
     GhlTokenService,
     GhlReputationService,
+    GhlBusinessSnapshotService,
     GoogleAdapter,
     GoogleService,
     GoogleTokenService,

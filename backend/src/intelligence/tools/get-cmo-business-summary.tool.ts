@@ -7,6 +7,8 @@ import { GetGbpSummaryTool } from './get-gbp-summary.tool';
 import { GetGhlPipelineSummaryTool } from './get-ghl-pipeline-summary.tool';
 import { GetGscSummaryTool } from './get-gsc-summary.tool';
 import { GetSeoProjectSummaryTool } from './get-seo-project-summary.tool';
+import { GhlBusinessSnapshotService } from '../../integrations/ghl/ghl-business-snapshot.service';
+import { Optional } from '@nestjs/common';
 
 const schema = z.object({
   days: z.number().int().min(1).max(30).default(7),
@@ -32,6 +34,7 @@ export class GetCmoBusinessSummaryTool implements Tool<Input>, OnModuleInit {
     private readonly seo: GetSeoProjectSummaryTool,
     private readonly gbp: GetGbpSummaryTool,
     private readonly registry: ToolRegistry,
+    @Optional() private readonly ghlBusiness?: GhlBusinessSnapshotService,
   ) {}
 
   onModuleInit(): void {
@@ -50,12 +53,15 @@ export class GetCmoBusinessSummaryTool implements Tool<Input>, OnModuleInit {
         };
       }
     };
-    const [ga4, searchConsole, pipeline, seo, googleBusinessProfile] = await Promise.all([
+    const [ga4, searchConsole, pipeline, seo, googleBusinessProfile, goHighLevelOperations] = await Promise.all([
       safe('Website analytics', this.ga4.execute({ days }, context)),
       safe('Google Search Console', this.gsc.execute({ days }, context)),
       safe('GoHighLevel pipeline', this.pipeline.execute({ maxRecords: 500 }, context)),
       safe('SEO project', this.seo.execute({}, context)),
       safe('Google Business Profile', this.gbp.execute({ days }, context)),
+      this.ghlBusiness
+        ? safe('GoHighLevel operations', this.ghlBusiness.summary(context.organizationId))
+        : Promise.resolve({ available: false, message: 'GoHighLevel operating data is unavailable.' }),
     ]);
     return {
       periodDays: days,
@@ -64,6 +70,7 @@ export class GetCmoBusinessSummaryTool implements Tool<Input>, OnModuleInit {
       goHighLevelPipeline: pipeline,
       seo,
       googleBusinessProfile,
+      goHighLevelOperations,
     };
   }
 }

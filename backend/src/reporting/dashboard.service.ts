@@ -4,6 +4,7 @@ import type { DashboardKind } from '../shared/database';
 import { GhlAdapter } from '../integrations/ghl/ghl.adapter';
 import { GhlTokenService } from '../integrations/ghl/ghl-token.service';
 import { GhlReputationService } from '../integrations/ghl/ghl-reputation.service';
+import { GhlBusinessSnapshotService } from '../integrations/ghl/ghl-business-snapshot.service';
 
 const DASHBOARDS: readonly DashboardKind[] = [
   'executive',
@@ -16,7 +17,7 @@ const DASHBOARDS: readonly DashboardKind[] = [
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly database: DatabaseService, @Optional() private readonly ghl?: GhlAdapter, @Optional() private readonly ghlTokens?: GhlTokenService, @Optional() private readonly ghlReputation?: GhlReputationService) {}
+  constructor(private readonly database: DatabaseService, @Optional() private readonly ghl?: GhlAdapter, @Optional() private readonly ghlTokens?: GhlTokenService, @Optional() private readonly ghlReputation?: GhlReputationService, @Optional() private readonly ghlBusiness?: GhlBusinessSnapshotService) {}
 
   kinds(): readonly DashboardKind[] {
     return DASHBOARDS;
@@ -249,8 +250,11 @@ export class DashboardService {
       this.database.db.selectFrom('capere.automation_actions').select(['id','kind','status','title','payload','error','approved_at','executed_at','created_at']).where('organization_id','=',organizationId).orderBy('created_at','desc').limit(30).execute(),
       this.database.db.selectFrom('capere.integrations').select(['provider','status','last_sync_at','last_error']).where('organization_id','=',organizationId).execute(),
     ]);
-    const pipeline = await this.pipelineSummary(organizationId);
-    return { generatedAt:new Date().toISOString(), metrics, seoMetrics, performance, insights, recommendations, briefs, tasks, integrations, pipeline, evidenceComplete:metrics.length>0||seoMetrics.length>0||insights.length>0||recommendations.length>0||pipeline.connected };
+    const [pipeline, operations] = await Promise.all([
+      this.pipelineSummary(organizationId),
+      this.ghlBusiness ? this.ghlBusiness.summary(organizationId) : Promise.resolve(null),
+    ]);
+    return { generatedAt:new Date().toISOString(), metrics, seoMetrics, performance, insights, recommendations, briefs, tasks, integrations, pipeline, operations, evidenceComplete:metrics.length>0||seoMetrics.length>0||insights.length>0||recommendations.length>0||pipeline.connected||Boolean(operations?.connected) };
   }
 
   private cmoPerformanceFromSource(rows: Array<{ provider: string; metric_date: Date | string; dimensions: unknown; metrics: unknown }>) {

@@ -8,6 +8,7 @@ const sections = [
   ['Morning Brief', 'brief'],
   ['Insights', 'insights'],
   ['Revenue Opportunities', 'revenue'],
+  ['Business Activity', 'activity'],
   ['Marketing Advice', 'advice'],
   ['Tasks', 'tasks'],
   ['Ask CMO', 'ask'],
@@ -69,6 +70,17 @@ type Integration = {
 };
 type Pipeline = { connected:boolean; returned:number; total:number; pipelineValue:number; byStatus:Record<string,number>; error:string|null; locationName?:string };
 type Performance = { periodDays:number; currentSessions:number; previousSessions:number; currentSearchClicks:number; currentSearchImpressions:number; searchAveragePosition:number|null };
+type OperationalSource = { available:boolean; message?:string };
+type Operations = {
+  connected:boolean;
+  locationName?:string|null;
+  contacts:OperationalSource&{total:number;addedLast7Days:number;addedLast30Days:number};
+  conversations:OperationalSource&{total:number;unread:number;activeLast7Days:number};
+  appointments:OperationalSource&{upcoming7Days:number;upcoming30Days:number;calendars:number};
+  workflows:OperationalSource&{total:number;published:number};
+  team:OperationalSource&{users:number};
+  reputation:OperationalSource&{reviewCount:number;averageRating:number;unanswered:number};
+};
 
 const Card = ({ label, value, detail }: { label: string; value: string; detail: string }) => (
   <div className="card cmo-summary">
@@ -128,6 +140,7 @@ export default async function CmoPage({
   const integrations = (Array.isArray(d.integrations) ? d.integrations : []) as Integration[];
   const pipeline = (d.pipeline && typeof d.pipeline === 'object' ? d.pipeline : { connected:false, returned:0, total:0, pipelineValue:0, byStatus:{}, error:null }) as Pipeline;
   const performance = (d.performance && typeof d.performance === 'object' ? d.performance : { periodDays:7, currentSessions:0, previousSessions:0, currentSearchClicks:0, currentSearchImpressions:0, searchAveragePosition:null }) as Performance;
+  const operations = (d.operations && typeof d.operations === 'object' ? d.operations : null) as Operations|null;
   const latest = (name: string) => metrics.find((m) => m.metric_name === name)?.metric_value;
   const activeTasks = tasks.filter((t) => ['draft', 'approved', 'executing'].includes(t.status));
   const revenueRecs = recommendations.filter((r) => r.category === 'revenue');
@@ -240,6 +253,35 @@ export default async function CmoPage({
               body={pipeline.returned ? 'Capere is monitoring the current pipeline and will recommend actions when a clear opportunity is supported by the data.' : 'Revenue recommendations will appear after GoHighLevel opportunity activity is available.'}
             />
           )}
+        </Section>
+      </div>
+    );
+  else if (view === 'activity')
+    content = (
+      <div className="cmo-layout">
+        <div className="grid grid-4">
+          <Card label="New contacts" value={operations?.contacts.available ? String(operations.contacts.addedLast7Days) : '—'} detail="Added during the last 7 days" />
+          <Card label="Upcoming appointments" value={operations?.appointments.available ? String(operations.appointments.upcoming7Days) : '—'} detail="Scheduled during the next 7 days" />
+          <Card label="Conversations needing attention" value={operations?.conversations.available ? String(operations.conversations.unread) : '—'} detail="Unread customer conversations" />
+          <Card label="Customer rating" value={operations?.reputation.available && operations.reputation.reviewCount ? `${operations.reputation.averageRating.toFixed(1)}/5` : '—'} detail={operations?.reputation.available ? `${operations.reputation.reviewCount} reviews in GoHighLevel` : 'Waiting for review access'} />
+        </div>
+        <Section title="Customer activity" subtitle="A clear view of recent demand and follow-up activity in GoHighLevel.">
+          <div className="pipeline-status-grid">
+            <div className="pipeline-status"><span>All contacts</span><strong>{operations?.contacts.available ? operations.contacts.total.toLocaleString() : '—'}</strong><small>{operations?.contacts.available ? `${operations.contacts.addedLast30Days} added in 30 days` : operations?.contacts.message ?? 'Data unavailable'}</small></div>
+            <div className="pipeline-status"><span>Recent conversations</span><strong>{operations?.conversations.available ? operations.conversations.activeLast7Days : '—'}</strong><small>{operations?.conversations.available ? 'Active during the last 7 days' : operations?.conversations.message ?? 'Data unavailable'}</small></div>
+            <div className="pipeline-status"><span>Appointments</span><strong>{operations?.appointments.available ? operations.appointments.upcoming30Days : '—'}</strong><small>{operations?.appointments.available ? 'Scheduled during the next 30 days' : operations?.appointments.message ?? 'Data unavailable'}</small></div>
+            <div className="pipeline-status"><span>Published automations</span><strong>{operations?.workflows.available ? operations.workflows.published : '—'}</strong><small>{operations?.workflows.available ? `${operations.workflows.total} workflows available` : operations?.workflows.message ?? 'Data unavailable'}</small></div>
+            <div className="pipeline-status"><span>Team members</span><strong>{operations?.team.available ? operations.team.users : '—'}</strong><small>{operations?.team.available ? 'Users available in this location' : operations?.team.message ?? 'Data unavailable'}</small></div>
+            <div className="pipeline-status"><span>Reviews awaiting replies</span><strong>{operations?.reputation.available ? operations.reputation.unanswered : '—'}</strong><small>{operations?.reputation.available ? 'Customer feedback needing attention' : operations?.reputation.message ?? 'Data unavailable'}</small></div>
+          </div>
+        </Section>
+        <Section title="What to focus on" subtitle="Simple operating checks based on your current customer activity.">
+          <div className="cmo-list">
+            {operations?.conversations.available && operations.conversations.unread > 0 && <article className="cmo-list-row"><span className="cmo-severity high">Priority</span><div><strong>Reply to unread customer conversations</strong><p>{operations.conversations.unread} conversation{operations.conversations.unread===1?' is':'s are'} waiting for attention. Fast replies can improve the chance of converting an enquiry.</p></div></article>}
+            {operations?.reputation.available && operations.reputation.unanswered > 0 && <article className="cmo-list-row"><span className="cmo-severity medium">Review</span><div><strong>Respond to recent customer reviews</strong><p>{operations.reputation.unanswered} review{operations.reputation.unanswered===1?' has':'s have'} no recorded reply. A professional response shows customers that their feedback is valued.</p></div></article>}
+            {operations?.appointments.available && operations.appointments.upcoming7Days > 0 && <article className="cmo-list-row"><span className="cmo-severity green">Upcoming</span><div><strong>Prepare for this week’s appointments</strong><p>{operations.appointments.upcoming7Days} appointment{operations.appointments.upcoming7Days===1?' is':'s are'} scheduled during the next seven days.</p></div></article>}
+            {operations && ![operations.conversations.unread,operations.reputation.unanswered,operations.appointments.upcoming7Days].some((value)=>value>0) && <State title="No urgent customer activity" body="Capere is monitoring contacts, conversations, appointments, workflows, and customer reviews through GoHighLevel." />}
+          </div>
         </Section>
       </div>
     );
