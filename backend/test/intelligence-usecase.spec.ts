@@ -101,6 +101,22 @@ describe('GenerateChatResponseUseCase', () => {
       expect.objectContaining({ toolName: 'get_gbp_summary', ok: true }),
     ]);
   });
+
+  it('preflights business profile questions without exposing internal provider ids', async () => {
+    const fixture = makeFixture({ gbpAvailable: true });
+    await fixture.useCase.execute({
+      organizationId: '00000000-0000-0000-0000-000000000001',
+      role: 'owner',
+      capability: 'cmo',
+      message: 'Give details about my business profile',
+      ephemeral: true,
+    });
+    expect(fixture.execution.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('Do not reveal internal location'),
+      }),
+    );
+  });
 });
 
 function makeFixture(options: { reviewEnabled?: boolean; gbpAvailable?: boolean } = {}) {

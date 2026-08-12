@@ -20,8 +20,28 @@ export interface GbpSummary {
     mapsPerformance: boolean;
     postsPhotosQa: boolean;
   };
-  readonly integrationId?: string;
-  readonly resourceId?: string;
+  readonly businessProfile?: {
+    source: 'google_places' | 'unavailable';
+    available: boolean;
+    setupRequired: boolean;
+    name: string | null;
+    description: string | null;
+    primaryCategory: string | null;
+    categories: string[];
+    address: string | null;
+    phone: string | null;
+    website: string | null;
+    mapsUrl: string | null;
+    businessStatus: string | null;
+    openNow: boolean | null;
+    openingHours: string[];
+    rating: number;
+    reviewCount: number;
+    photoCount: number;
+    publicReviewSampleCount: number;
+    message?: string;
+  };
+  readonly supplementalSocialProfiles?: Record<string, string>;
   readonly period?: { start: string; end: string; days: number };
   readonly metrics?: Record<string, number>;
   readonly reviews?: { count: number; averageRating: number; unanswered: number };
@@ -66,7 +86,50 @@ export class GetGbpSummaryTool implements Tool<Input, GbpSummary>, OnModuleInit 
           mapsPerformance: false,
           postsPhotosQa: false,
         },
-        resourceId: ghl.locationId,
+        businessProfile: ghl.googleProfile
+          ? {
+              source: ghl.googleProfile.available ? 'google_places' : 'unavailable',
+              available: ghl.googleProfile.available,
+              setupRequired: ghl.googleProfile.setupRequired,
+              name: ghl.googleProfile.name,
+              description: ghl.googleProfile.description,
+              primaryCategory: ghl.googleProfile.primaryCategory,
+              categories: ghl.googleProfile.categories,
+              address: ghl.googleProfile.address,
+              phone: ghl.googleProfile.phone,
+              website: ghl.googleProfile.website,
+              mapsUrl: ghl.googleProfile.mapsUrl,
+              businessStatus: ghl.googleProfile.businessStatus,
+              openNow: ghl.googleProfile.openNow,
+              openingHours: ghl.googleProfile.openingHours,
+              rating: ghl.googleProfile.rating,
+              reviewCount: ghl.googleProfile.reviewCount,
+              photoCount: ghl.googleProfile.photos.length,
+              publicReviewSampleCount: ghl.googleProfile.reviews.length,
+              message: ghl.googleProfile.message,
+            }
+          : {
+              source: 'unavailable',
+              available: false,
+              setupRequired: false,
+              name: null,
+              description: null,
+              primaryCategory: null,
+              categories: [],
+              address: null,
+              phone: null,
+              website: null,
+              mapsUrl: null,
+              businessStatus: null,
+              openNow: null,
+              openingHours: [],
+              rating: 0,
+              reviewCount: 0,
+              photoCount: 0,
+              publicReviewSampleCount: 0,
+              message: 'GoHighLevel did not provide a Google Place ID for this business.',
+            },
+        supplementalSocialProfiles: ghl.business?.social ?? {},
         reviews: {
           count: ghl.reviewCount,
           averageRating: ghl.averageRating,
@@ -141,8 +204,6 @@ export class GetGbpSummaryTool implements Tool<Input, GbpSummary>, OnModuleInit 
       accessStatus: 'available',
       profileConnectionConfirmed: true,
       coverage: { reviews: true, mapsPerformance: true, postsPhotosQa: false },
-      integrationId: integration.id,
-      resourceId: integration.account_id ?? undefined,
       period: { start, end, days },
       metrics,
       reviews: {

@@ -122,6 +122,7 @@ export class GenerateChatResponseUseCase {
     const liveSourceContext = preflight
       ? `\n\n## Mandatory live source check\nThe user asked about Google Business Profile, reviews, reputation, ratings, or the local profile. ` +
         `Capere checked get_gbp_summary before this model call. Treat this result as current evidence and do not infer availability from integration names alone.\n` +
+        `Do not reveal internal location, integration, resource, OAuth, or provider identifiers. If the business profile says setupRequired, explain that this is a Capere administrator configuration and do not ask the client to connect Google. ` +
         `${preflight.ok ? JSON.stringify(preflight.output ?? null) : `The live check failed: ${preflight.error?.message ?? 'unknown error'}`}`
       : '';
     const result = await this.tools.run({
