@@ -5,6 +5,8 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 type Session = {
   id: string;
   title: string | null;
+  summary_title: string | null;
+  preview: string | null;
   last_message_at: string | null;
   created_at: string;
 };
@@ -148,8 +150,9 @@ export function AskCmoChat() {
       </div>
       <div className="ask-cmo-session-list">
         {sessions.map((session) => <button className={`ask-cmo-session ${sessionId === session.id ? 'active' : ''}`} type="button" key={session.id} onClick={() => void loadConversation(session.id)}>
-          <strong>{session.title || 'New CMO conversation'}</strong>
-          <span>{new Date(session.last_message_at ?? session.created_at).toLocaleDateString()}</span>
+          <strong>{session.summary_title || session.title || 'New CMO conversation'}</strong>
+          {session.preview && <p>{session.preview}</p>}
+          <span>{new Date(session.last_message_at ?? session.created_at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
         </button>)}
         {!sessions.length && !loading && <p className="ask-cmo-history-empty">Your conversations will appear here.</p>}
       </div>

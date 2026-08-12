@@ -117,7 +117,7 @@ export class MemoryService implements ConversationMemory, BusinessMemory {
     agent: string;
     limit?: number;
   }) {
-    return this.database.db
+    const sessions = await this.database.db
       .selectFrom('capere.ai_sessions')
       .select(['id', 'title', 'last_message_at', 'created_at'])
       .where('organization_id', '=', params.organizationId)
@@ -128,6 +128,62 @@ export class MemoryService implements ConversationMemory, BusinessMemory {
       .orderBy('created_at', 'desc')
       .limit(Math.min(params.limit ?? 12, 30))
       .execute();
+
+    if (!sessions.length) return [];
+
+    const assistantMessages = await this.database.db
+      .selectFrom('capere.conversation_messages')
+      .select(['session_id', 'content', 'sequence'])
+      .where('organization_id', '=', params.organizationId)
+      .where('session_id', 'in', sessions.map((session) => session.id))
+      .where('role', '=', 'assistant')
+      .where('tool_call_id', 'is', null)
+      .orderBy('sequence', 'desc')
+      .execute();
+    const summaries = new Map<string, { title: string; preview: string | null }>();
+    for (const message of assistantMessages) {
+      if (summaries.has(message.session_id)) continue;
+      const summary = this.conversationSummary(message.content);
+      if (summary) summaries.set(message.session_id, summary);
+    }
+
+    return sessions.map((session) => ({
+      ...session,
+      summary_title: summaries.get(session.id)?.title ?? session.title,
+      preview: summaries.get(session.id)?.preview ?? null,
+    }));
+  }
+
+  private conversationSummary(content: string): { title: string; preview: string | null } | null {
+    const cleanLines = content
+      .replace(/\r/g, '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !/^[-|: ]+$/.test(line) && !line.includes('|'))
+      .map((line) => line
+        .replace(/^#{1,6}\s+/, '')
+        .replace(/^[-*•]\s+/, '')
+        .replace(/\*\*/g, '')
+        .replace(/\s+/g, ' ')
+        .trim())
+      .filter(Boolean);
+    if (!cleanLines.length) return null;
+    const normalized = content.toLowerCase();
+    const title = normalized.includes('google business profile') || normalized.includes('gbp')
+      ? 'Google Business Profile overview'
+      : normalized.includes('this week') || normalized.includes("week's focus") || normalized.includes('weekly priorit')
+        ? 'Weekly marketing priorities'
+        : normalized.includes('pipeline') || normalized.includes('revenue')
+          ? 'Revenue and pipeline opportunities'
+          : normalized.includes('search visibility') || normalized.includes('seo')
+            ? 'Search visibility overview'
+            : normalized.includes('website') || normalized.includes('traffic') || normalized.includes('conversion')
+              ? 'Website performance overview'
+              : 'CMO business review';
+    const heading = cleanLines[0];
+    const detail = cleanLines.find((line) => line !== heading && line.length >= 35) ?? null;
+    const preview = detail && detail.length > 150 ? `${detail.slice(0, 147).trimEnd()}…` : detail;
+    return { title, preview };
   }
 
   async sessionConversation(params: {
