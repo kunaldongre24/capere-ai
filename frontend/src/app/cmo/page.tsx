@@ -159,7 +159,7 @@ export default async function CmoPage({
   }));
   let content: React.ReactNode;
   if (view === 'integrations')
-    content = <IntegrationConnectPanel embedded />;
+    content = <IntegrationConnectPanel embedded gbpConnected={Boolean(businessProfile?.profileConnectionConfirmed)} />;
   else if (view === 'business')
     content = <BusinessProfileDashboard profile={businessProfile} />;
   else if (view === 'insights')

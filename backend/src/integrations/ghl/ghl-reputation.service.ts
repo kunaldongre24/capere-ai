@@ -106,7 +106,11 @@ export class GhlReputationService {
         timezone: location.timezone ?? null,
         logoUrl: location.logoUrl ?? null,
         googlePlacesId: location.googlePlacesId ?? null,
-        social: location.social ?? {},
+        social: Object.fromEntries(
+          Object.entries(location.social ?? {}).filter(([key, value]) =>
+            key.toLowerCase() !== 'googleplacesid' && key.toLowerCase() !== 'google_place_id' && Boolean(value),
+          ),
+        ),
       };
       const googleProfile = location.googlePlacesId
         ? await this.places.profile(location.googlePlacesId)
@@ -125,7 +129,7 @@ export class GhlReputationService {
           ...this.empty(
             true,
             permissionRequired
-              ? 'Business details are available through GoHighLevel, but Capere still needs reputation permission to read Google reviews.'
+              ? 'The public business profile is available. Capere still needs GoHighLevel reputation permission to read review data.'
               : 'Business details are available, but review data is temporarily unavailable from GoHighLevel.',
             integration.account_id,
             integration.account_name,
@@ -133,6 +137,7 @@ export class GhlReputationService {
           ),
           business,
           googleProfile,
+          profileConnectionConfirmed: Boolean(googleProfile?.available),
         };
       }
       const rows = body.reviews ?? body.data ?? [];
@@ -188,7 +193,7 @@ export class GhlReputationService {
         dataAvailable: reviews.length > 0,
         source: 'go_high_level',
         accessStatus: 'available',
-        profileConnectionConfirmed: true,
+        profileConnectionConfirmed: Boolean(googleProfile?.available) || reviews.length > 0,
         locationId: integration.account_id,
         locationName: integration.account_name,
         reviews,
@@ -214,7 +219,7 @@ export class GhlReputationService {
       return this.empty(
         true,
         permissionRequired
-          ? 'GoHighLevel is connected, but Capere does not yet have permission to read reputation data. Google Business Profile linkage cannot be confirmed until the agency updates the Capere app installation.'
+          ? 'The GoHighLevel account is connected, but review data is unavailable until the agency grants Capere reputation permission. Public listing details may still be available.'
           : 'Review data is temporarily unavailable from GoHighLevel.',
         integration.account_id,
         integration.account_name,
