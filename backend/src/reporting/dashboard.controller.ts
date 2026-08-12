@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, ParseIntPipe, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, ParseUUIDPipe, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentOrg, CurrentOrgRole, CurrentUser, Roles } from '../auth';
 import { GenerateChatResponseUseCase } from '../intelligence';
@@ -9,6 +10,7 @@ import { DashboardService } from './dashboard.service';
 import { ContentGenerationService } from './content-generation.service';
 import type { DashboardKind } from '../shared/database';
 import { AskCmoDto, GenerateContentDraftDto } from './reporting.dto';
+import { GooglePlacesService } from '../integrations/google/google-places.service';
 
 const CMO_SOURCE_LABELS: Record<string, string> = {
   get_cmo_business_summary: 'Business overview (GA4, Search Console, GoHighLevel, SEO and GBP checks)',
@@ -28,6 +30,7 @@ export class DashboardController {
     private readonly content: ContentGenerationService,
     private readonly intelligence: GenerateChatResponseUseCase,
     private readonly memory: MemoryService,
+    private readonly places: GooglePlacesService,
   ) {}
 
   @Get()
@@ -52,6 +55,23 @@ export class DashboardController {
   @Roles('owner', 'office_manager', 'marketing_manager', 'capere_admin')
   cmoSummary(@CurrentOrg() organizationId: string) {
     return this.dashboards.cmoSummary(organizationId);
+  }
+
+  @Get('ai-cmo/business-profile/photo')
+  @Roles('owner', 'office_manager', 'marketing_manager', 'capere_admin')
+  async businessProfilePhoto(
+    @Query('name') name: string,
+    @Query('width') width: string | undefined,
+    @Res() response: Response,
+  ) {
+    const media = await this.places.photo(name, Number(width ?? 1200));
+    response.status(media.status);
+    const contentType = media.headers.get('content-type');
+    if (contentType) response.setHeader('content-type', contentType);
+    const cacheControl = media.headers.get('cache-control');
+    response.setHeader('cache-control', cacheControl ?? 'private, max-age=3600');
+    if (!media.body) return response.end();
+    return response.send(Buffer.from(await media.arrayBuffer()));
   }
 
   @Get('ai-cmo/conversations')

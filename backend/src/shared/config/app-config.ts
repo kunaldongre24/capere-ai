@@ -61,6 +61,7 @@ export interface AppConfig {
     readonly redirectUri: string;
     readonly authorizationUrl: string;
     readonly tokenUrl: string;
+    readonly placesApiKey: string;
     readonly scopes: readonly string[];
   };
   readonly dataForSeo: {
@@ -281,6 +282,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       redirectUri: env.GOOGLE_OAUTH_REDIRECT_URI,
       authorizationUrl: env.GOOGLE_AUTHORIZATION_URL,
       tokenUrl: env.GOOGLE_TOKEN_URL,
+      placesApiKey: env.GOOGLE_PLACES_API_KEY,
       scopes: Object.freeze([
         'openid',
         'email',

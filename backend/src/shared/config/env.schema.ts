@@ -97,6 +97,7 @@ export const envSchema = z
       .url()
       .default('https://accounts.google.com/o/oauth2/v2/auth'),
     GOOGLE_TOKEN_URL: z.string().url().default('https://oauth2.googleapis.com/token'),
+    GOOGLE_PLACES_API_KEY: z.string().optional().default(''),
     DATAFORSEO_LOGIN: z.string().optional().default(''),
     DATAFORSEO_PASSWORD: z.string().optional().default(''),
     DATAFORSEO_BASE_URL: z.string().url().default('https://api.dataforseo.com/v3'),

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../shared/database';
 import { GhlAdapter } from './ghl.adapter';
 import { GhlTokenService } from './ghl-token.service';
+import { GooglePlacesService, type GooglePlaceProfile } from '../google/google-places.service';
 
 type GhlReview = {
   id?: string;
@@ -65,6 +66,7 @@ export type GhlReputationSummary = {
     googlePlacesId: string | null;
     social: Record<string, string>;
   };
+  googleProfile?: GooglePlaceProfile;
   message?: string;
 };
 
@@ -74,6 +76,7 @@ export class GhlReputationService {
     private readonly database: DatabaseService,
     private readonly adapter: GhlAdapter,
     private readonly tokens: GhlTokenService,
+    private readonly places: GooglePlacesService,
   ) {}
 
   async summary(organizationId: string): Promise<GhlReputationSummary> {
@@ -105,6 +108,9 @@ export class GhlReputationService {
         googlePlacesId: location.googlePlacesId ?? null,
         social: location.social ?? {},
       };
+      const googleProfile = location.googlePlacesId
+        ? await this.places.profile(location.googlePlacesId)
+        : undefined;
       let body: GhlReviewsResponse;
       try {
         body = await this.adapter.getJson<GhlReviewsResponse>(
@@ -126,6 +132,7 @@ export class GhlReputationService {
             permissionRequired ? 'permission_required' : 'temporarily_unavailable',
           ),
           business,
+          googleProfile,
         };
       }
       const rows = body.reviews ?? body.data ?? [];
@@ -196,6 +203,7 @@ export class GhlReputationService {
         ratingDistribution,
         monthlyTrend,
         business,
+        googleProfile,
         message: reviews.length
           ? undefined
           : 'GoHighLevel is connected, but no Google reviews are available for this location yet.',

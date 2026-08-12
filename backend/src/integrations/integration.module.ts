@@ -21,6 +21,7 @@ import { GoogleController } from './google/google.controller';
 import { GoogleService } from './google/google.service';
 import { GoogleTokenService } from './google/google-token.service';
 import { GoogleSyncService } from './google/google-sync.service';
+import { GooglePlacesService } from './google/google-places.service';
 import { IntegrationController } from './integration.controller';
 import { IntegrationService } from './integration.service';
 
@@ -48,6 +49,7 @@ import { IntegrationService } from './integration.service';
     GoogleService,
     GoogleTokenService,
     GoogleSyncService,
+    GooglePlacesService,
     DataForSeoAdapter,
     DataForSeoService,
     GithubAdapter,
@@ -65,6 +67,7 @@ import { IntegrationService } from './integration.service';
     GoogleService,
     GoogleTokenService,
     GoogleSyncService,
+    GooglePlacesService,
     DataForSeoAdapter,
     DataForSeoService,
     GithubAdapter,
