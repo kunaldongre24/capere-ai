@@ -126,7 +126,7 @@ export default async function CmoPage({
   const view = requestedView === 'brief' || requestedView === 'insights' ? 'overview'
     : requestedView === 'advice' ? 'revenue'
       : requestedView === 'tasks' ? 'activity'
-        : requestedView === 'integrations' ? 'business' : requestedView;
+        : requestedView === 'integrations' ? 'overview' : requestedView;
   let summary: Envelope<Record<string, unknown>> | null = null;
   try {
     summary = await capereFetch('/api/v1/command-centers/ai-cmo/summary');
@@ -161,7 +161,7 @@ export default async function CmoPage({
   if (view === 'integrations')
     content = <IntegrationConnectPanel embedded gbpConnected={Boolean(businessProfile?.profileConnectionConfirmed)} />;
   else if (view === 'business')
-    content = <div className="cmo-layout"><BusinessProfileDashboard profile={businessProfile} /><Section title="Connected services" subtitle="Manage the services that supply business and marketing information."><IntegrationConnectPanel embedded gbpConnected={Boolean(businessProfile?.profileConnectionConfirmed)} /></Section></div>;
+    content = <div className="cmo-layout"><BusinessProfileDashboard profile={businessProfile} /></div>;
   else if (view === 'insights')
     content = (
       <div className="cmo-layout">
@@ -418,6 +418,9 @@ export default async function CmoPage({
         </div>
         <Section title="Morning brief" subtitle="A chronological feed of what changed, why it matters, and what to do next.">
           {feed.length ? <div className="cmo-feed">{feed.map((item) => <article className="cmo-feed-item" key={item.id}><div className={`cmo-feed-avatar ${item.tone}`}>{item.kind==='insight'?'!':item.kind==='recommendation'?'→':'✓'}</div><div className="cmo-feed-card"><div className="cmo-feed-meta"><span>{item.label}</span><time>{new Date(item.date).toLocaleString()}</time></div><h3>{item.title}</h3><p className="cmo-feed-body">{item.body}</p>{item.action&&<div className="cmo-feed-action"><strong>Next step</strong><span>{item.action}</span></div>}<div className="cmo-feed-footer"><span>AI CMO</span><span>Based on connected business data</span></div></div></article>)}</div>:<State title="No updates yet" body="The feed will fill automatically after synchronized metrics and recommendations are available."/>}
+        </Section>
+        <Section title="Connected services" subtitle="Manage the services that supply business and marketing information.">
+          <IntegrationConnectPanel embedded gbpConnected={Boolean(businessProfile?.profileConnectionConfirmed)} />
         </Section>
       </div>
     );
