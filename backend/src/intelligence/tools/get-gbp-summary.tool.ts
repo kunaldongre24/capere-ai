@@ -1,8 +1,9 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, Optional } from '@nestjs/common';
 import { z } from 'zod';
 import { DatabaseService } from '../../shared/database';
 import type { Tool, ToolContext } from './tool.interface';
 import { ToolRegistry } from './tool-registry';
+import { GhlReputationService } from '../../integrations/ghl/ghl-reputation.service';
 const inputSchema = z.object({
   days: z.number().int().min(1).max(90).default(7),
   integrationId: z.string().uuid().optional(),
@@ -37,12 +38,26 @@ export class GetGbpSummaryTool implements Tool<Input, GbpSummary>, OnModuleInit 
   constructor(
     private readonly database: DatabaseService,
     private readonly registry: ToolRegistry,
+    @Optional() private readonly ghlReputation?: GhlReputationService,
   ) {}
   onModuleInit(): void {
     this.registry.register(this);
   }
   async execute(input: Input, context: ToolContext): Promise<GbpSummary> {
     const days = input.days ?? 7;
+    const ghl = await this.ghlReputation?.summary(context.organizationId);
+    if (ghl?.connected)
+      return {
+        connected: true,
+        dataAvailable: ghl.dataAvailable,
+        resourceId: ghl.locationId,
+        reviews: {
+          count: ghl.reviewCount,
+          averageRating: ghl.averageRating,
+          unanswered: ghl.unanswered,
+        },
+        message: ghl.message,
+      };
     let integrationQuery = this.database.db
       .selectFrom('capere.integrations')
       .select(['id', 'account_id'])

@@ -265,6 +265,16 @@ export default async function SeoPage({
   const pendingCompetitors = competitors.filter((c) => c.metrics?.status !== 'ready');
   const targetDomain = websiteDomain(project?.site_url);
   const integrations = (Array.isArray(d.integrations) ? d.integrations : []) as Integration[];
+  const localProfile = (d.localProfile && typeof d.localProfile === 'object' ? d.localProfile : null) as null | {
+    connected: boolean;
+    dataAvailable: boolean;
+    locationName?: string | null;
+    reviewCount: number;
+    averageRating: number;
+    unanswered: number;
+    message?: string;
+    reviews: Array<{id:string;rating:number;reviewerName:string|null;comment:string|null;createdAt:string|null;replied:boolean;source:string}>;
+  };
   const recs = (Array.isArray(d.recommendations) ? d.recommendations : []) as Array<{
     id: string;
     title: string;
@@ -482,33 +492,29 @@ export default async function SeoPage({
       <div className="grid">
         <div className="grid grid-3">
           <Card
-            title="Google business listing"
-            value={connected('google_business_profile') ? 'Connected' : 'Not connected'}
-            detail="Your profile shown in Google Maps"
+            title="Local profile"
+            value={localProfile?.connected ? 'Available' : 'Unavailable'}
+            detail={localProfile?.locationName ?? 'Provided through GoHighLevel'}
             icon="gbp"
           />
           <Card
             title="Customer reviews"
-            value="—"
-            detail="Available after connecting your listing"
+            value={localProfile?.dataAvailable ? String(localProfile.reviewCount) : '—'}
+            detail={localProfile?.dataAvailable ? `${localProfile.averageRating.toFixed(1)} out of 5 average rating` : 'Waiting for review data'}
             icon="gbp"
           />
           <Card
-            title="Customer actions"
-            value="—"
-            detail="Calls, directions, and website visits"
+            title="Reviews awaiting a reply"
+            value={localProfile?.dataAvailable ? String(localProfile.unanswered) : '—'}
+            detail="Customer feedback that may need attention"
             icon="clicks"
           />
         </div>
         <Panel
-          title="Local business visibility"
-          subtitle="Understand how customers find and contact you through Google."
+          title="Customer feedback"
+          subtitle="Google reviews available in your connected GoHighLevel account."
         >
-          <p>
-            {connected('google_business_profile')
-              ? 'Your Google Business Profile is connected. Reviews and customer activity will appear after the next data update.'
-              : 'Connect your Google Business Profile to see reviews, calls, direction requests, website visits, and how customers discover your business locally.'}
-          </p>
+          {localProfile?.reviews?.length ? <div className="seo-status-list">{localProfile.reviews.slice(0,10).map((review)=><div className="seo-status-row" key={review.id}><div><strong>{review.reviewerName??'Google customer'} · {review.rating.toFixed(1)}/5</strong><p>{review.comment||'This customer left a rating without written feedback.'}</p><small>{review.createdAt?new Date(review.createdAt).toLocaleString(undefined,{weekday:'short',day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}):review.source}</small></div><span className={`badge ${review.replied?'good':''}`}>{review.replied?'Replied':'Reply suggested'}</span></div>)}</div> : <p>{localProfile?.message ?? 'GoHighLevel is connected. Customer reviews will appear here when they are available.'}</p>}
         </Panel>
       </div>
     );
@@ -737,7 +743,7 @@ export default async function SeoPage({
             </Panel>
           </div>
         )}
-        <Panel title="SEO readiness" subtitle="Information sources currently available to your team."><StatusList items={[{label:'Google Search performance',value:connected('google_search_console')?'Connected':'Not connected',status:connected('google_search_console')?'good':'warning',detail:'Search appearances and website visits'},{label:'Website review',value:audit?'Complete':'Pending',status:audit?'good':'neutral',detail:'Technical checks and recommendations'},{label:'Google business listing',value:connected('google_business_profile')?'Connected':'Not connected',status:connected('google_business_profile')?'good':'warning',detail:'Reviews and local customer actions'},{label:'Competitor comparison',value:competitors.length?'Active':'Not configured',status:competitors.length?'good':'neutral',detail:'Visibility comparison with selected businesses'}]} /></Panel>
+        <Panel title="SEO readiness" subtitle="Information sources currently available to your team."><StatusList items={[{label:'Google Search performance',value:connected('google_search_console')?'Connected':'Not connected',status:connected('google_search_console')?'good':'warning',detail:'Search appearances and website visits'},{label:'Website review',value:audit?'Complete':'Pending',status:audit?'good':'neutral',detail:'Technical checks and recommendations'},{label:'Customer reviews',value:localProfile?.connected?'Available through GoHighLevel':'Unavailable',status:localProfile?.connected?'good':'warning',detail:'Ratings and customer feedback'},{label:'Competitor comparison',value:competitors.length?'Active':'Not configured',status:competitors.length?'good':'neutral',detail:'Visibility comparison with selected businesses'}]} /></Panel>
         <Panel title="Executive interpretation" subtitle="What the current SEO evidence says.">
           <p>
             Google Search Console reports {impressions} impression(s), {clicks} click(s), and

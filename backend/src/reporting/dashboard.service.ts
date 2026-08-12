@@ -3,6 +3,7 @@ import { DatabaseService } from '../shared/database';
 import type { DashboardKind } from '../shared/database';
 import { GhlAdapter } from '../integrations/ghl/ghl.adapter';
 import { GhlTokenService } from '../integrations/ghl/ghl-token.service';
+import { GhlReputationService } from '../integrations/ghl/ghl-reputation.service';
 
 const DASHBOARDS: readonly DashboardKind[] = [
   'executive',
@@ -15,7 +16,7 @@ const DASHBOARDS: readonly DashboardKind[] = [
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly database: DatabaseService, @Optional() private readonly ghl?: GhlAdapter, @Optional() private readonly ghlTokens?: GhlTokenService) {}
+  constructor(private readonly database: DatabaseService, @Optional() private readonly ghl?: GhlAdapter, @Optional() private readonly ghlTokens?: GhlTokenService, @Optional() private readonly ghlReputation?: GhlReputationService) {}
 
   kinds(): readonly DashboardKind[] {
     return DASHBOARDS;
@@ -307,7 +308,7 @@ export class DashboardService {
       metrics = await this.query(organizationId, 'seo', 30);
     }
     const queryStart = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10);
-    const [recommendationsResult, technicalAuditResult, auditHistoryResult, projectResult, keywordsResult, searchQueryRowsResult, competitorsResult, integrationsResult] = await Promise.allSettled([
+    const [recommendationsResult, technicalAuditResult, auditHistoryResult, projectResult, keywordsResult, searchQueryRowsResult, competitorsResult, integrationsResult, localProfileResult] = await Promise.allSettled([
       this.database.db
         .selectFrom('capere.recommendations')
         .selectAll()
@@ -352,6 +353,7 @@ export class DashboardService {
         .execute(),
       this.database.db.selectFrom('capere.competitors').select(['domain','name','metrics','last_checked_at']).where('organization_id','=',organizationId).orderBy('last_checked_at','desc').limit(25).execute(),
       this.database.db.selectFrom('capere.integrations').select(['provider','status','last_sync_at','last_error']).where('organization_id','=',organizationId).execute(),
+      this.ghlReputation ? this.ghlReputation.summary(organizationId) : Promise.resolve(null),
     ]);
     const value = <T>(result: PromiseSettledResult<T>, fallback: T): T => result.status === 'fulfilled' ? result.value : fallback;
     const recommendations = value(recommendationsResult, []);
@@ -390,6 +392,7 @@ export class DashboardService {
       .slice(0, 25);
     const competitors = value(competitorsResult, []);
     const integrations = value(integrationsResult, []);
+    const localProfile = value(localProfileResult, null);
     return {
       generatedAt: new Date().toISOString(),
       metrics,
@@ -403,6 +406,7 @@ export class DashboardService {
       searchQueries,
       competitors,
       integrations,
+      localProfile,
       evidenceComplete: metrics.length > 0 || Boolean(technicalAudit),
     };
   }

@@ -272,6 +272,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
         'locations/customValues.readonly',
         'locations/tags.readonly',
         'locations/tags.write',
+        'reputation/review.readonly',
       ]),
     }),
     google: Object.freeze({
