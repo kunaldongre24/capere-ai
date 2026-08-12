@@ -6,15 +6,11 @@ import { IntegrationConnectPanel } from '@/components/integration-connect-panel'
 import { BusinessProfileDashboard, type BusinessProfileData } from '@/components/business-profile-dashboard';
 
 const sections = [
-  ['Morning Brief', 'brief'],
-  ['Insights', 'insights'],
-  ['Revenue Opportunities', 'revenue'],
-  ['Business Activity', 'activity'],
+  ['Overview', 'overview'],
+  ['Growth', 'revenue'],
+  ['Operations', 'activity'],
   ['Business Profile', 'business'],
-  ['Marketing Advice', 'advice'],
-  ['Tasks', 'tasks'],
   ['Ask CMO', 'ask'],
-  ['Integrations', 'integrations'],
 ] as const;
 type Metric = {
   metric_name: string;
@@ -126,7 +122,11 @@ export default async function CmoPage({
 }: {
   searchParams: Promise<{ view?: string }>;
 }) {
-  const view = (await searchParams).view ?? 'brief';
+  const requestedView = (await searchParams).view ?? 'overview';
+  const view = requestedView === 'brief' || requestedView === 'insights' ? 'overview'
+    : requestedView === 'advice' ? 'revenue'
+      : requestedView === 'tasks' ? 'activity'
+        : requestedView === 'integrations' ? 'business' : requestedView;
   let summary: Envelope<Record<string, unknown>> | null = null;
   try {
     summary = await capereFetch('/api/v1/command-centers/ai-cmo/summary');
@@ -154,14 +154,14 @@ export default async function CmoPage({
   const connected = integrations.filter((i) => i.status === 'connected').length;
   const tabs = sections.map(([text, key]) => ({
     label: text,
-    href: key === 'brief' ? '/cmo' : `/cmo?view=${key}`,
+    href: key === 'overview' ? '/cmo' : `/cmo?view=${key}`,
     active: view === key,
   }));
   let content: React.ReactNode;
   if (view === 'integrations')
     content = <IntegrationConnectPanel embedded gbpConnected={Boolean(businessProfile?.profileConnectionConfirmed)} />;
   else if (view === 'business')
-    content = <BusinessProfileDashboard profile={businessProfile} />;
+    content = <div className="cmo-layout"><BusinessProfileDashboard profile={businessProfile} /><Section title="Connected services" subtitle="Manage the services that supply business and marketing information."><IntegrationConnectPanel embedded gbpConnected={Boolean(businessProfile?.profileConnectionConfirmed)} /></Section></div>;
   else if (view === 'insights')
     content = (
       <div className="cmo-layout">
@@ -259,6 +259,9 @@ export default async function CmoPage({
             />
           )}
         </Section>
+        <Section title="Marketing advice" subtitle="Practical guidance for improving visibility, traffic, and conversion.">
+          {marketingRecs.length ? <div className="cmo-grid">{marketingRecs.map((r) => <article className="cmo-opportunity" key={r.id}><div className="cmo-row-top"><span className={`badge priority-${r.priority}`}>{label(r.priority)}</span><span className="muted">{label(r.category)}</span></div><h3>{r.title}</h3><p>{r.rationale}</p><div className="cmo-next"><strong>What to do</strong><p>{r.action}</p></div></article>)}</div> : <State title="No marketing advice is ready yet" body="Advice appears when connected marketing and search data provides enough evidence for a useful recommendation." />}
+        </Section>
       </div>
     );
   else if (view === 'activity')
@@ -287,6 +290,9 @@ export default async function CmoPage({
             {operations?.appointments.available && operations.appointments.upcoming7Days > 0 && <article className="cmo-list-row"><span className="cmo-severity green">Upcoming</span><div><strong>Prepare for this week’s appointments</strong><p>{operations.appointments.upcoming7Days} appointment{operations.appointments.upcoming7Days===1?' is':'s are'} scheduled during the next seven days.</p></div></article>}
             {operations && ![operations.conversations.unread,operations.reputation.unanswered,operations.appointments.upcoming7Days].some((value)=>value>0) && <State title="No urgent customer activity" body="Capere is monitoring contacts, conversations, appointments, workflows, and customer reviews through GoHighLevel." />}
           </div>
+        </Section>
+        <Section title="Action queue" subtitle="Review approved work and track completed actions.">
+          {tasks.length ? <CmoTaskQueue tasks={tasks} /> : <State title="No CMO tasks yet" body="Tasks appear after a recommendation is approved for execution." />}
         </Section>
       </div>
     );
@@ -407,6 +413,8 @@ export default async function CmoPage({
             value={String(activeTasks.length)}
             detail="Approved and active work"
           />
+          <Card label="Website visits" value={String(performance.currentSessions)} detail={`Last ${performance.periodDays} days`} />
+          <Card label="Pipeline value" value={pipeline.connected ? pipeline.pipelineValue.toLocaleString(undefined,{style:'currency',currency:'USD',maximumFractionDigits:0}) : '—'} detail={pipeline.connected ? `${pipeline.total} GoHighLevel opportunities` : 'CRM data unavailable'} />
         </div>
         <Section title="Morning brief" subtitle="A chronological feed of what changed, why it matters, and what to do next.">
           {feed.length ? <div className="cmo-feed">{feed.map((item) => <article className="cmo-feed-item" key={item.id}><div className={`cmo-feed-avatar ${item.tone}`}>{item.kind==='insight'?'!':item.kind==='recommendation'?'→':'✓'}</div><div className="cmo-feed-card"><div className="cmo-feed-meta"><span>{item.label}</span><time>{new Date(item.date).toLocaleString()}</time></div><h3>{item.title}</h3><p className="cmo-feed-body">{item.body}</p>{item.action&&<div className="cmo-feed-action"><strong>Next step</strong><span>{item.action}</span></div>}<div className="cmo-feed-footer"><span>AI CMO</span><span>Based on connected business data</span></div></div></article>)}</div>:<State title="No updates yet" body="The feed will fill automatically after synchronized metrics and recommendations are available."/>}
