@@ -258,6 +258,19 @@ export class DashboardService {
     return { generatedAt:new Date().toISOString(), metrics, seoMetrics, performance, insights, recommendations, briefs, tasks, integrations, pipeline, operations, businessProfile, evidenceComplete:metrics.length>0||seoMetrics.length>0||insights.length>0||recommendations.length>0||pipeline.connected||Boolean(operations?.connected) };
   }
 
+  async ghlBusinessProfileConnectUrl(organizationId: string) {
+    const integration = await this.database.db
+      .selectFrom('capere.integrations')
+      .select('account_id')
+      .where('organization_id', '=', organizationId)
+      .where('provider', '=', 'go_high_level')
+      .where('status', '=', 'connected')
+      .orderBy('created_at', 'asc')
+      .executeTakeFirst();
+    if (!integration?.account_id) return null;
+    return `https://app.gohighlevel.com/v2/location/${encodeURIComponent(integration.account_id)}/reputation/settings`;
+  }
+
   private cmoPerformanceFromSource(rows: Array<{ provider: string; metric_date: Date | string; dimensions: unknown; metrics: unknown }>) {
     const today = new Date();
     const currentStart = new Date(today.getTime() - 6 * 86_400_000).toISOString().slice(0, 10);

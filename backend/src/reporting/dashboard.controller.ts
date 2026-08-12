@@ -57,6 +57,15 @@ export class DashboardController {
     return this.dashboards.cmoSummary(organizationId);
   }
 
+  @Get('ai-cmo/business-profile/connect-url')
+  @Roles('owner', 'office_manager', 'marketing_manager', 'capere_admin')
+  async businessProfileConnectUrl(@CurrentOrg() organizationId: string) {
+    const url = await this.dashboards.ghlBusinessProfileConnectUrl(organizationId);
+    if (!url)
+      throw AppException.notFound(ErrorCode.NOT_FOUND, 'GoHighLevel is not connected for this business.');
+    return { url };
+  }
+
   @Get('ai-cmo/business-profile/photo')
   @Roles('owner', 'office_manager', 'marketing_manager', 'capere_admin')
   async businessProfilePhoto(
