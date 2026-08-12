@@ -12,6 +12,14 @@ type Input = { days?: number; integrationId?: string };
 export interface GbpSummary {
   readonly connected: boolean;
   readonly dataAvailable: boolean;
+  readonly source?: 'go_high_level' | 'direct_google';
+  readonly accessStatus?: 'available' | 'permission_required' | 'temporarily_unavailable';
+  readonly profileConnectionConfirmed?: boolean;
+  readonly coverage?: {
+    reviews: boolean;
+    mapsPerformance: boolean;
+    postsPhotosQa: boolean;
+  };
   readonly integrationId?: string;
   readonly resourceId?: string;
   readonly period?: { start: string; end: string; days: number };
@@ -50,6 +58,14 @@ export class GetGbpSummaryTool implements Tool<Input, GbpSummary>, OnModuleInit 
       return {
         connected: true,
         dataAvailable: ghl.dataAvailable,
+        source: 'go_high_level',
+        accessStatus: ghl.accessStatus,
+        profileConnectionConfirmed: ghl.profileConnectionConfirmed,
+        coverage: {
+          reviews: ghl.accessStatus === 'available',
+          mapsPerformance: false,
+          postsPhotosQa: false,
+        },
         resourceId: ghl.locationId,
         reviews: {
           count: ghl.reviewCount,
@@ -121,6 +137,10 @@ export class GetGbpSummaryTool implements Tool<Input, GbpSummary>, OnModuleInit 
     return {
       connected: true,
       dataAvailable: true,
+      source: 'direct_google',
+      accessStatus: 'available',
+      profileConnectionConfirmed: true,
+      coverage: { reviews: true, mapsPerformance: true, postsPhotosQa: false },
       integrationId: integration.id,
       resourceId: integration.account_id ?? undefined,
       period: { start, end, days },

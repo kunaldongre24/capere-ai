@@ -150,7 +150,10 @@ through the connected GoHighLevel account even when no separately named google_b
 integration exists. Never tell the user to connect GBP merely because that integration row is absent.
 Clearly distinguish GHL-provided review data from direct Google Maps/Search performance data:
 profile impressions, calls, website clicks, and direction requests require direct Google API access
-unless a tool result explicitly provides them.`;
+unless a tool result explicitly provides them. A connected GoHighLevel location alone does not prove
+that Google Business Profile is linked. Only say the profile linkage is confirmed when
+profileConnectionConfirmed is true. When accessStatus is permission_required, say Capere cannot yet
+confirm the GBP linkage or read reviews until the agency approves the Marketplace permission.`;
 
 const CONTENT_SYSTEM = `${SPECIALIST_BASE}
 

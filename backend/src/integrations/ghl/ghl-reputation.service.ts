@@ -31,6 +31,8 @@ export type GhlReputationSummary = {
   connected: boolean;
   dataAvailable: boolean;
   source: 'go_high_level';
+  accessStatus: 'available' | 'permission_required' | 'temporarily_unavailable';
+  profileConnectionConfirmed: boolean;
   locationId?: string;
   locationName?: string | null;
   reviews: Array<{
@@ -94,6 +96,8 @@ export class GhlReputationService {
         connected: true,
         dataAvailable: reviews.length > 0,
         source: 'go_high_level',
+        accessStatus: 'available',
+        profileConnectionConfirmed: true,
         locationId: integration.account_id,
         locationName: integration.account_name,
         reviews,
@@ -108,13 +112,15 @@ export class GhlReputationService {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
+      const permissionRequired = message.includes('401') || message.includes('403');
       return this.empty(
         true,
-        message.includes('401') || message.includes('403')
-          ? 'Review access needs approval. Ask your agency administrator to update the Capere app installation.'
+        permissionRequired
+          ? 'GoHighLevel is connected, but Capere does not yet have permission to read reputation data. Google Business Profile linkage cannot be confirmed until the agency updates the Capere app installation.'
           : 'Review data is temporarily unavailable from GoHighLevel.',
         integration.account_id,
         integration.account_name,
+        permissionRequired ? 'permission_required' : 'temporarily_unavailable',
       );
     }
   }
@@ -124,11 +130,14 @@ export class GhlReputationService {
     message: string,
     locationId?: string,
     locationName?: string | null,
+    accessStatus: GhlReputationSummary['accessStatus'] = 'temporarily_unavailable',
   ): GhlReputationSummary {
     return {
       connected,
       dataAvailable: false,
       source: 'go_high_level',
+      accessStatus,
+      profileConnectionConfirmed: false,
       locationId,
       locationName,
       reviews: [],
