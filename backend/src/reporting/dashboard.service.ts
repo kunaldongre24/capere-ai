@@ -268,7 +268,7 @@ export class DashboardService {
       .orderBy('created_at', 'asc')
       .executeTakeFirst();
     if (!integration?.account_id) return null;
-    return `https://app.gohighlevel.com/v2/location/${encodeURIComponent(integration.account_id)}/reputation/settings`;
+    return `https://app.gohighlevel.com/v2/location/${encodeURIComponent(integration.account_id)}/reputation/gbp`;
   }
 
   private cmoPerformanceFromSource(rows: Array<{ provider: string; metric_date: Date | string; dimensions: unknown; metrics: unknown }>) {
