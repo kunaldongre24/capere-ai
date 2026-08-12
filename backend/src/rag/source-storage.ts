@@ -1,4 +1,5 @@
 import type { AppConfig } from '../shared/config';
+import { Storage } from '@google-cloud/storage';
 
 export interface StoredObject {
   readonly path: string;
@@ -84,5 +85,43 @@ export class SupabaseSourceStorage implements SourceStorage {
       headers,
       signal: AbortSignal.timeout(this.config.openRouter.timeoutMs),
     });
+  }
+}
+
+export class GoogleCloudSourceStorage implements SourceStorage {
+  private readonly storage = new Storage();
+
+  constructor(private readonly config: AppConfig) {}
+
+  async put(path: string, body: Uint8Array, mimeType: string): Promise<StoredObject> {
+    await this.file(path).save(Buffer.from(body), {
+      contentType: mimeType,
+      resumable: false,
+      preconditionOpts: { ifGenerationMatch: 0 },
+      metadata: { cacheControl: 'private, max-age=0, no-store' },
+    });
+    return { path, bytes: body.byteLength, mimeType };
+  }
+
+  async get(path: string): Promise<Uint8Array> {
+    const [body] = await this.file(path).download();
+    return new Uint8Array(body);
+  }
+
+  async remove(path: string): Promise<void> {
+    await this.file(path).delete({ ignoreNotFound: true });
+  }
+
+  async signedUrl(path: string, expiresInSeconds: number): Promise<string> {
+    const [url] = await this.file(path).getSignedUrl({
+      version: 'v4',
+      action: 'read',
+      expires: Date.now() + expiresInSeconds * 1_000,
+    });
+    return url;
+  }
+
+  private file(path: string) {
+    return this.storage.bucket(this.config.rag.storage.bucket).file(path);
   }
 }

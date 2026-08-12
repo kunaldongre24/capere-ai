@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { AutomationService } from '../automation';
 import { DatabaseService } from '../shared/database';
 import { InsightsEngine } from '../insights';
 import { RecommendationService } from '../recommendations';
 import { ContentGenerationService, DashboardService } from '../reporting';
-import { QueueRegistryService } from './queue-registry.service';
+import { JOB_DISPATCHER, type JobDispatcher } from './job-dispatcher.service';
 
 export const SCHEDULE_INTERVALS = {
   hourly: 3_600_000,
@@ -41,7 +41,7 @@ export class SchedulerService {
   constructor(
     private readonly database: DatabaseService,
     private readonly insights: InsightsEngine,
-    @Optional() private readonly queues?: QueueRegistryService,
+    @Optional() @Inject(JOB_DISPATCHER) private readonly dispatcher?: JobDispatcher,
     @Optional() private readonly recommendations?: RecommendationService,
     @Optional() private readonly dashboards?: DashboardService,
     @Optional() private readonly automation?: AutomationService,
@@ -286,18 +286,16 @@ export class SchedulerService {
       // A scheduled run must receive a fresh BullMQ id. Reusing a daily id
       // collides with retained completed jobs and silently suppresses later
       // runs on the same day.
-      const jobId = `google-sync-${organizationId}-${integrationId}-${Date.now()}`;
-      if (!this.queues) throw new Error('Queue registry is unavailable');
-      const job = await this.queues.get('integration-sync').add(
-        'google-sync',
+      const dispatchId = `google-sync-${organizationId}-${integrationId}-${Date.now()}`;
+      const jobId = await this.requireDispatcher().dispatch(
         {
           kind: 'google-sync',
           organizationId,
           integrationId,
         },
-        { jobId },
+        dispatchId,
       );
-      return { queuedJobId: job.id };
+      return { queuedJobId: jobId };
     }
     if (jobType === 'dataforseo-audit-poll') {
       if (!organizationId) throw new Error('dataforseo-audit-poll requires an organization');
@@ -305,9 +303,7 @@ export class SchedulerService {
       const taskId = value['taskId'];
       if (typeof taskId !== 'string')
         throw new Error('dataforseo-audit-poll requires payload.taskId');
-      if (!this.queues) throw new Error('Queue registry is unavailable');
-      const job = await this.queues.get('integration-sync').add(
-        'dataforseo-audit-poll',
+      const jobId = await this.requireDispatcher().dispatch(
         {
           kind: 'dataforseo-audit-poll',
           organizationId,
@@ -315,9 +311,9 @@ export class SchedulerService {
         },
         // Polls are recurring until the provider reports completion; each poll
         // therefore needs a distinct id while the task remains in flight.
-        { jobId: `dataforseo-audit-poll-${taskId}-${Date.now()}` },
+        `dataforseo-audit-poll-${taskId}-${Date.now()}`,
       );
-      return { queuedJobId: job.id };
+      return { queuedJobId: jobId };
     }
     if (jobType === 'dataforseo-audit-submit') {
       if (!organizationId) throw new Error('dataforseo-audit-submit requires an organization');
@@ -326,35 +322,31 @@ export class SchedulerService {
       const maxCrawlPages = value['maxCrawlPages'];
       if (typeof projectId !== 'string')
         throw new Error('dataforseo-audit-submit requires payload.projectId');
-      if (!this.queues) throw new Error('Queue registry is unavailable');
-      const job = await this.queues.get('integration-sync').add(
-        'dataforseo-audit-submit',
+      const jobId = await this.requireDispatcher().dispatch(
         {
           kind: 'dataforseo-audit-submit',
           organizationId,
           projectId,
           maxCrawlPages: typeof maxCrawlPages === 'number' ? Math.min(maxCrawlPages, 20) : 20,
         },
-        { jobId: `dataforseo-audit-submit-${organizationId}-${projectId}-${Date.now()}` },
+        `dataforseo-audit-submit-${organizationId}-${projectId}-${Date.now()}`,
       );
-      return { queuedJobId: job.id };
+      return { queuedJobId: jobId };
     }
     if (jobType === 'dataforseo-competitor-refresh') {
       if (!organizationId) throw new Error('dataforseo-competitor-refresh requires an organization');
       const projectId = this.objectPayload(payload)['projectId'];
       if (typeof projectId !== 'string') throw new Error('dataforseo-competitor-refresh requires payload.projectId');
-      if (!this.queues) throw new Error('Queue registry is unavailable');
-      const job = await this.queues.get('integration-sync').add('dataforseo-competitor-refresh', { kind: 'dataforseo-competitor-refresh', organizationId, projectId }, { jobId: `dataforseo-competitor-refresh-${organizationId}-${projectId}-${Date.now()}` });
-      return { queuedJobId: job.id };
+      const jobId = await this.requireDispatcher().dispatch({ kind: 'dataforseo-competitor-refresh', organizationId, projectId }, `dataforseo-competitor-refresh-${organizationId}-${projectId}-${Date.now()}`);
+      return { queuedJobId: jobId };
     }
     if (jobType === 'dataforseo-keyword-refresh') {
       if (!organizationId) throw new Error('dataforseo-keyword-refresh requires an organization');
       const value = this.objectPayload(payload);
       const projectId = value['projectId'];
       if (typeof projectId !== 'string') throw new Error('dataforseo-keyword-refresh requires payload.projectId');
-      if (!this.queues) throw new Error('Queue registry is unavailable');
-      const job = await this.queues.get('integration-sync').add('dataforseo-keyword-refresh', { kind:'dataforseo-keyword-refresh',organizationId,projectId,force:value['force'] === true }, { jobId:`dataforseo-keyword-refresh-${organizationId}-${projectId}-${Date.now()}` });
-      return { queuedJobId: job.id };
+      const jobId = await this.requireDispatcher().dispatch({ kind:'dataforseo-keyword-refresh',organizationId,projectId,force:value['force'] === true }, `dataforseo-keyword-refresh-${organizationId}-${projectId}-${Date.now()}`);
+      return { queuedJobId: jobId };
     }
     if (jobType === 'github-change-execute') {
       if (!organizationId) throw new Error('github-change-execute requires an organization');
@@ -362,15 +354,11 @@ export class SchedulerService {
       const requestId = value['requestId'];
       if (typeof requestId !== 'string')
         throw new Error('github-change-execute requires payload.requestId');
-      if (!this.queues) throw new Error('Queue registry is unavailable');
-      const job = await this.queues
-        .get('integration-sync')
-        .add(
-          'github-change-execute',
-          { kind: 'github-change-execute', organizationId, requestId },
-          { jobId: `github-change-execute-${requestId}-${Date.now()}` },
-        );
-      return { queuedJobId: job.id };
+      const jobId = await this.requireDispatcher().dispatch(
+        { kind: 'github-change-execute', organizationId, requestId },
+        `github-change-execute-${requestId}-${Date.now()}`,
+      );
+      return { queuedJobId: jobId };
     }
     throw new Error(`No handler registered for job type "${jobType}".`);
   }
@@ -384,6 +372,11 @@ export class SchedulerService {
       }
     }
     return payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {};
+  }
+
+  private requireDispatcher(): JobDispatcher {
+    if (!this.dispatcher) throw new Error('Job dispatcher is unavailable');
+    return this.dispatcher;
   }
 
   nextRunAt(schedule: string, from: Date): Date {

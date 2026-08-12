@@ -15,11 +15,27 @@ export interface AppConfig {
   readonly logLevel: Env['LOG_LEVEL'];
   readonly corsOrigins: readonly string[];
   readonly webUrl: string;
+  readonly managedTaskSecret: string;
+  readonly identity: {
+    readonly provider: 'supabase' | 'firebase';
+    readonly firebaseProjectId: string;
+  };
+  readonly managedTasks: {
+    readonly audience: string;
+    readonly serviceAccount: string;
+  };
+  readonly jobs: {
+    readonly dispatchMode: 'redis' | 'cloud_tasks';
+    readonly googleCloudProject: string;
+    readonly cloudTasksLocation: string;
+    readonly cloudTasksQueue: string;
+  };
 
   readonly database: {
     readonly url: string;
     readonly serviceRoleKey: string;
     readonly poolMax: number;
+    readonly sslMode: 'verify' | 'disable';
     readonly sslCa?: string;
   };
 
@@ -118,6 +134,7 @@ export interface AppConfig {
     readonly maxChunksPerDocument: number;
     readonly searchLimit: number;
     readonly storage: {
+      readonly provider: 'supabase' | 'gcs';
       readonly bucket: string;
       readonly maxBytes: number;
       readonly signedUrlSeconds: number;
@@ -216,11 +233,24 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     logLevel: env.LOG_LEVEL,
     corsOrigins: Object.freeze(env.CORS_ORIGINS),
     webUrl: env.APP_WEB_URL.replace(/\/$/, ''),
+    managedTaskSecret: env.MANAGED_TASK_SECRET,
+    identity: Object.freeze({ provider: env.AUTH_PROVIDER, firebaseProjectId: env.FIREBASE_PROJECT_ID }),
+    managedTasks: Object.freeze({
+      audience: env.MANAGED_TASK_AUDIENCE,
+      serviceAccount: env.MANAGED_TASK_SERVICE_ACCOUNT,
+    }),
+    jobs: Object.freeze({
+      dispatchMode: env.JOB_DISPATCH_MODE,
+      googleCloudProject: env.GOOGLE_CLOUD_PROJECT,
+      cloudTasksLocation: env.CLOUD_TASKS_LOCATION,
+      cloudTasksQueue: env.CLOUD_TASKS_QUEUE,
+    }),
 
     database: Object.freeze({
       url: env.DATABASE_URL,
       serviceRoleKey: env.DATABASE_SERVICE_ROLE_KEY,
       poolMax: env.DATABASE_POOL_MAX,
+      sslMode: env.DATABASE_SSL_MODE,
       sslCa: env.DATABASE_SSL_CA_BASE64
         ? Buffer.from(env.DATABASE_SSL_CA_BASE64, 'base64').toString('utf8')
         : undefined,
@@ -345,6 +375,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       maxChunksPerDocument: env.RAG_MAX_CHUNKS_PER_DOCUMENT,
       searchLimit: env.RAG_SEARCH_LIMIT,
       storage: Object.freeze({
+        provider: env.RAG_STORAGE_PROVIDER,
         bucket: env.RAG_STORAGE_BUCKET,
         maxBytes: env.RAG_STORAGE_MAX_BYTES,
         signedUrlSeconds: env.RAG_STORAGE_SIGNED_URL_SECONDS,

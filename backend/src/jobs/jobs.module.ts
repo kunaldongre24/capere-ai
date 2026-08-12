@@ -10,6 +10,9 @@ import { JobMonitoringService } from './job-monitoring.service';
 import { OutboxRelayWorker } from './outbox-relay.worker';
 import { QueueRegistryService } from './queue-registry.service';
 import { SchedulerService } from './scheduler.service';
+import { ManagedJobsController } from './managed-jobs.controller';
+import { CloudTasksJobDispatcher, JOB_DISPATCHER, RedisJobDispatcher } from './job-dispatcher.service';
+import { APP_CONFIG, type AppConfig } from '../shared/config';
 
 /**
  * Jobs module.
@@ -35,14 +38,22 @@ import { SchedulerService } from './scheduler.service';
     RecommendationModule,
     ReportingModule,
   ],
-  controllers: [JobMonitoringController],
+  controllers: [JobMonitoringController, ManagedJobsController],
   providers: [
     QueueRegistryService,
     OutboxRelayWorker,
     SchedulerService,
     IntegrationJobWorker,
+    RedisJobDispatcher,
+    CloudTasksJobDispatcher,
+    {
+      provide: JOB_DISPATCHER,
+      inject: [APP_CONFIG, RedisJobDispatcher, CloudTasksJobDispatcher],
+      useFactory: (config: AppConfig, redis: RedisJobDispatcher, cloudTasks: CloudTasksJobDispatcher) =>
+        config.jobs.dispatchMode === 'cloud_tasks' ? cloudTasks : redis,
+    },
     JobMonitoringService,
   ],
-  exports: [QueueRegistryService, OutboxRelayWorker, SchedulerService, IntegrationJobWorker],
+  exports: [QueueRegistryService, OutboxRelayWorker, SchedulerService, IntegrationJobWorker, JOB_DISPATCHER],
 })
 export class JobsModule {}

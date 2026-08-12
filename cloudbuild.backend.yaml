@@ -1,0 +1,45 @@
+substitutions:
+  _REGION: asia-south1
+  _SERVICE: capere-backend
+  _REPOSITORY: capere
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --tag
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/backend:$COMMIT_SHA
+      - --file
+      - backend/Dockerfile
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/backend:$COMMIT_SHA
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/backend:$COMMIT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --service-account=capere-api@$PROJECT_ID.iam.gserviceaccount.com
+      - --add-cloudsql-instances=$PROJECT_ID:${_REGION}:capere-postgres
+      - --port=8080
+      - --min-instances=1
+      - --max-instances=5
+      - --concurrency=40
+      - --cpu=1
+      - --memory=1Gi
+      - --timeout=300
+      - --allow-unauthenticated
+      - --set-env-vars=NODE_ENV=production,PORT=8080,AUTH_PROVIDER=supabase,JOB_DISPATCH_MODE=redis,RAG_STORAGE_PROVIDER=supabase,DATABASE_POOL_MAX=4,APP_WEB_URL=https://app.capereai.com,CORS_ORIGINS=https://app.capereai.com
+      - --set-secrets=DATABASE_URL=CAPERE_DATABASE_URL:latest,DATABASE_SERVICE_ROLE_KEY=CAPERE_DATABASE_SERVICE_ROLE_KEY:latest,DATABASE_SSL_CA_BASE64=CAPERE_DATABASE_SSL_CA_BASE64:latest,SUPABASE_PROJECT_URL=CAPERE_SUPABASE_URL:latest,API_KEYS_HASHING_SALT=CAPERE_API_KEYS_HASHING_SALT:latest,REDIS_URL=CAPERE_REDIS_URL:latest,KEY_ENCRYPTION_KEY=CAPERE_KEY_ENCRYPTION_KEY:latest,OPENROUTER_API_KEY=CAPERE_OPENROUTER_API_KEY:latest,GHL_CLIENT_ID=CAPERE_GHL_CLIENT_ID:latest,GHL_CLIENT_SECRET=CAPERE_GHL_CLIENT_SECRET:latest,GHL_SSO_KEY=CAPERE_GHL_SSO_KEY:latest,GOOGLE_CLIENT_ID=CAPERE_GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=CAPERE_GOOGLE_CLIENT_SECRET:latest,GOOGLE_PLACES_API_KEY=CAPERE_GOOGLE_PLACES_API_KEY:latest,DATAFORSEO_LOGIN=CAPERE_DATAFORSEO_LOGIN:latest,DATAFORSEO_PASSWORD=CAPERE_DATAFORSEO_PASSWORD:latest
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/backend:$COMMIT_SHA
+
+options:
+  logging: CLOUD_LOGGING_ONLY

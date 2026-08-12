@@ -52,11 +52,21 @@ export const envSchema = z
       .default('info'),
     CORS_ORIGINS: csv.default('http://localhost:8080'),
     APP_WEB_URL: z.string().url().default('https://app.capereai.com'),
+    MANAGED_TASK_SECRET: z.string().optional().default(''),
+    AUTH_PROVIDER: z.enum(['supabase', 'firebase']).default('supabase'),
+    FIREBASE_PROJECT_ID: z.string().optional().default(''),
+    MANAGED_TASK_AUDIENCE: z.string().url().optional().or(z.literal('')).default(''),
+    MANAGED_TASK_SERVICE_ACCOUNT: z.string().email().optional().or(z.literal('')).default(''),
+    JOB_DISPATCH_MODE: z.enum(['redis', 'cloud_tasks']).default('redis'),
+    GOOGLE_CLOUD_PROJECT: z.string().optional().default(''),
+    CLOUD_TASKS_LOCATION: z.string().default('asia-south1'),
+    CLOUD_TASKS_QUEUE: z.string().default('capere-integration-jobs'),
 
     // --- Database ---
     DATABASE_URL: z.string().url('must be a valid postgres connection string'),
     DATABASE_SERVICE_ROLE_KEY: z.string().optional().default(''),
     DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+    DATABASE_SSL_MODE: z.enum(['verify', 'disable']).default('verify'),
     DATABASE_SSL_CA_BASE64: z.string().optional().default(''),
 
     // --- Supabase Auth ---
@@ -71,7 +81,7 @@ export const envSchema = z
     API_KEYS_HASHING_SALT: z.string().min(16, 'must be at least 16 characters'),
 
     // --- Redis / BullMQ ---
-    REDIS_URL: z.string().url('must be a valid redis:// URL'),
+    REDIS_URL: z.string().url('must be a valid redis:// URL').default('redis://localhost:6379'),
 
     // --- GoHighLevel ---
     GHL_API_BASE_URL: z.string().url().default('https://services.leadconnectorhq.com'),
@@ -145,6 +155,7 @@ export const envSchema = z
     RAG_MAX_CHUNKS_PER_DOCUMENT: z.coerce.number().int().min(1).max(100_000).default(10_000),
     RAG_SEARCH_LIMIT: z.coerce.number().int().min(1).max(100).default(8),
     RAG_STORAGE_BUCKET: z.string().min(1).default('rag-sources'),
+    RAG_STORAGE_PROVIDER: z.enum(['supabase', 'gcs']).default('supabase'),
     // Files are currently buffered by Multer. Keep a hard ceiling until direct
     // streaming to Supabase Storage replaces in-memory multipart handling.
     RAG_STORAGE_MAX_BYTES: z.coerce.number().int().min(1).max(50_000_000).default(25_000_000),
@@ -175,7 +186,7 @@ export const envSchema = z
     // Auth must be verifiable. In test we allow a locally-signed secret, but in
     // any other environment one of the two Supabase verification modes must be
     // configured — otherwise every request would fail at runtime.
-    if (env.NODE_ENV !== 'test' && !env.SUPABASE_JWT_SECRET && !env.SUPABASE_PROJECT_URL) {
+    if (env.NODE_ENV !== 'test' && env.AUTH_PROVIDER === 'supabase' && !env.SUPABASE_JWT_SECRET && !env.SUPABASE_PROJECT_URL) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['SUPABASE_JWT_SECRET'],
@@ -187,21 +198,35 @@ export const envSchema = z
 
     // Guard against shipping the .env.example placeholders to production.
     if (env.NODE_ENV === 'production') {
-      if (!env.DATABASE_SERVICE_ROLE_KEY) {
+      if (env.AUTH_PROVIDER === 'supabase' && !env.DATABASE_SERVICE_ROLE_KEY) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['DATABASE_SERVICE_ROLE_KEY'],
           message: 'must be set in production for service-side database and storage operations',
         });
       }
-      if (!env.DATABASE_SSL_CA_BASE64) {
+      if (env.JOB_DISPATCH_MODE === 'cloud_tasks') {
+        if (!env.GOOGLE_CLOUD_PROJECT) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['GOOGLE_CLOUD_PROJECT'], message: 'must be set when JOB_DISPATCH_MODE=cloud_tasks' });
+        }
+        if (!env.MANAGED_TASK_AUDIENCE) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['MANAGED_TASK_AUDIENCE'], message: 'must be set when JOB_DISPATCH_MODE=cloud_tasks' });
+        }
+        if (!env.MANAGED_TASK_SERVICE_ACCOUNT) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['MANAGED_TASK_SERVICE_ACCOUNT'], message: 'must be set when JOB_DISPATCH_MODE=cloud_tasks' });
+        }
+      }
+      if (env.AUTH_PROVIDER === 'firebase' && !env.FIREBASE_PROJECT_ID) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['FIREBASE_PROJECT_ID'], message: 'must be set when AUTH_PROVIDER=firebase' });
+      }
+      if (env.DATABASE_SSL_MODE === 'verify' && !env.DATABASE_SSL_CA_BASE64) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['DATABASE_SSL_CA_BASE64'],
           message: 'must contain the trusted PostgreSQL CA certificate in production',
         });
       }
-      if (!env.SUPABASE_PROJECT_URL) {
+      if ((env.AUTH_PROVIDER === 'supabase' || env.RAG_STORAGE_PROVIDER === 'supabase') && !env.SUPABASE_PROJECT_URL) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['SUPABASE_PROJECT_URL'],

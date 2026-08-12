@@ -12,7 +12,7 @@ import { RagController } from './rag.controller';
 import { RagIngestionWorker } from './rag-ingestion.worker';
 import { RagService } from './rag.service';
 import { SOURCE_STORAGE } from './source-storage';
-import { SupabaseSourceStorage } from './source-storage';
+import { GoogleCloudSourceStorage, SupabaseSourceStorage, type SourceStorage } from './source-storage';
 import { VECTOR_STORE, type VectorStore } from './vector-store.port';
 import { VectorSemanticMemory } from './vector-semantic.memory';
 
@@ -52,7 +52,10 @@ import { VectorSemanticMemory } from './vector-semantic.memory';
     {
       provide: SOURCE_STORAGE,
       inject: [APP_CONFIG],
-      useFactory: (config: AppConfig): SupabaseSourceStorage => new SupabaseSourceStorage(config),
+      useFactory: (config: AppConfig): SourceStorage =>
+        config.rag.storage.provider === 'gcs'
+          ? new GoogleCloudSourceStorage(config)
+          : new SupabaseSourceStorage(config),
     },
     VectorSemanticMemory,
     RagService,
@@ -66,9 +69,9 @@ import { VectorSemanticMemory } from './vector-semantic.memory';
     EMBEDDING_PROVIDER,
     VECTOR_STORE,
     SOURCE_STORAGE,
+    RagIngestionWorker,
     SEMANTIC_MEMORY,
     RagService,
-    RagIngestionWorker,
   ],
 })
 export class RagModule {}

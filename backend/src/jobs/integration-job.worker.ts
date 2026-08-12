@@ -6,7 +6,7 @@ import { GithubService } from '../integrations/github/github.service';
 import { APP_CONFIG, type AppConfig } from '../shared/config';
 import { QUEUES } from './queue-registry.service';
 
-type IntegrationJob =
+export type IntegrationJob =
   | {
       kind: 'google-sync';
       organizationId: string;
@@ -52,6 +52,10 @@ export class IntegrationJobWorker {
     this.worker = undefined;
   }
 
+  execute(job: IntegrationJob) {
+    return this.process({ data: job } as Job<IntegrationJob>);
+  }
+
   private process(job: Job<IntegrationJob>) {
     if (job.data.kind === 'google-sync')
       return this.google.sync(
@@ -70,6 +74,8 @@ export class IntegrationJobWorker {
       return this.dataForSeo.refreshCompetitors(job.data.organizationId, job.data.projectId);
     if (job.data.kind === 'dataforseo-keyword-refresh')
       return this.dataForSeo.refreshKeywords(job.data.organizationId, job.data.projectId, job.data.force === true);
-    return this.github.executeApproved(job.data.organizationId, job.data.requestId);
+    if (job.data.kind === 'github-change-execute')
+      return this.github.executeApproved(job.data.organizationId, job.data.requestId);
+    throw new Error('Unsupported integration job payload');
   }
 }

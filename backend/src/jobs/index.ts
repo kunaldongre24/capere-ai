@@ -8,3 +8,4 @@ export {
   type QueueRegistry,
 } from './queue-registry.service';
 export { SCHEDULE_INTERVALS, SchedulerService, type ScheduleKind } from './scheduler.service';
+export { type IntegrationJob } from './integration-job.worker';

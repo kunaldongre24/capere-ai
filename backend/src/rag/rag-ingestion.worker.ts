@@ -42,12 +42,12 @@ export class RagIngestionWorker {
     while (this.running) await new Promise((resolve) => setTimeout(resolve, 25));
   }
 
-  private async tick(): Promise<void> {
-    if (this.running || this.stopping) return;
+  async tick(): Promise<boolean> {
+    if (this.running || this.stopping) return false;
     this.running = true;
     try {
       const job = await this.claim();
-      if (!job) return;
+      if (!job) return false;
       try {
         await this.withLeaseHeartbeat(job, async (assertLease) => {
           if (job.operation === 'delete') {
@@ -61,10 +61,11 @@ export class RagIngestionWorker {
       } catch (error) {
         if (error instanceof RagLeaseLostError) {
           this.logger.warn(error.message);
-          return;
+          return false;
         }
         await this.fail(job, error);
       }
+      return true;
     } catch (error) {
       this.logger.error(
         `RAG worker tick failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -72,6 +73,7 @@ export class RagIngestionWorker {
     } finally {
       this.running = false;
     }
+    return false;
   }
 
   private async claim(): Promise<ClaimedRagJob | undefined> {

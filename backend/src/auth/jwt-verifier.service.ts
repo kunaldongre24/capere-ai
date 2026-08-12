@@ -2,6 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from 'jose';
 import { APP_CONFIG, type AppConfig } from '../shared/config';
 import { AppException, ErrorCode } from '../shared/http';
+import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth, type Auth } from 'firebase-admin/auth';
 
 /**
  * Verified identity extracted from a Supabase JWT.
@@ -47,10 +49,22 @@ export class JwtVerifierService {
   private readonly jwks?: JWTVerifyGetKey;
   private readonly audience: string;
   private readonly issuer?: string;
+  private readonly firebaseAuth?: Auth;
 
   constructor(@Inject(APP_CONFIG) config: AppConfig) {
-    this.audience = config.supabase.audience;
-    this.issuer = config.supabase.issuer || undefined;
+    this.audience = config.identity.provider === 'firebase'
+      ? config.identity.firebaseProjectId
+      : config.supabase.audience;
+    this.issuer = config.identity.provider === 'firebase'
+      ? `https://securetoken.google.com/${config.identity.firebaseProjectId}`
+      : config.supabase.issuer || undefined;
+
+    if (config.identity.provider === 'firebase') {
+      if (!getApps().length) initializeApp({ credential: applicationDefault(), projectId: config.identity.firebaseProjectId });
+      this.firebaseAuth = getAuth();
+      this.logger.log(`JWT verification: Firebase (${config.identity.firebaseProjectId})`);
+      return;
+    }
 
     if (config.supabase.projectUrl) {
       const jwksUrl = new URL(
@@ -79,6 +93,19 @@ export class JwtVerifierService {
    * since a client can meaningfully act on the difference (refresh vs re-login).
    */
   async verify(token: string): Promise<AuthenticatedUser> {
+    if (this.firebaseAuth) {
+      try {
+        const payload = await this.firebaseAuth.verifySessionCookie(token, true);
+        return {
+          id: payload.uid,
+          email: payload.email,
+          issuedAt: payload.iat,
+          expiresAt: payload.exp,
+        };
+      } catch (error) {
+        throw this.translateError(error);
+      }
+    }
     if (!this.secretKey && !this.jwks) {
       throw AppException.unauthorized(
         ErrorCode.INVALID_TOKEN,

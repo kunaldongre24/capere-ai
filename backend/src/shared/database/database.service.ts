@@ -50,7 +50,7 @@ export class DatabaseService implements OnModuleDestroy {
     this.pool = new Pool({
       connectionString: config.database.url,
       max: config.database.poolMax,
-      ssl: resolveSsl(config.database.url, config.database.sslCa),
+      ssl: config.database.sslMode === 'disable' ? false : resolveSsl(config.database.url, config.database.sslCa),
       // Fail fast rather than queueing forever behind an exhausted pool.
       connectionTimeoutMillis: 10_000,
       idleTimeoutMillis: 30_000,

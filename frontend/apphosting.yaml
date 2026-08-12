@@ -5,6 +5,15 @@ runConfig:
   cpu: 1
   memoryMiB: 512
 env:
+  - variable: AUTH_PROVIDER
+    value: supabase
+    availability: [BUILD, RUNTIME]
+  - variable: FIREBASE_PROJECT_ID
+    value: capere-ai-786a0
+    availability: [BUILD, RUNTIME]
+  - variable: FIREBASE_WEB_API_KEY
+    secret: CAPERE_FIREBASE_WEB_API_KEY
+    availability: [RUNTIME]
   - variable: HOSTNAME
     value: 0.0.0.0
     availability: [RUNTIME]

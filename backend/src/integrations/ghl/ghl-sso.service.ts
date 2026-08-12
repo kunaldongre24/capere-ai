@@ -1,8 +1,11 @@
-import { createDecipheriv, createHash } from 'node:crypto';
+import { createDecipheriv, createHash, randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { APP_CONFIG, type AppConfig } from '../../shared/config';
 import { DatabaseService, type OrgRole } from '../../shared/database';
 import { AppException, ErrorCode } from '../../shared/http';
+import { getApps, initializeApp, applicationDefault } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { sql } from 'kysely';
 
 type GhlUserContext = {
   userId?: string;
@@ -112,6 +115,10 @@ export class GhlSsoService {
       );
     }
 
+    if (this.config.identity.provider === 'firebase') {
+      return this.exchangeFirebase(location.organization_id, email, context.userName, ghlUserId, context.role);
+    }
+
     const generated = await this.generateMagicLink(email, context.userName, ghlUserId);
     // GoTrue currently returns the generated user fields at the top level.
     // Keep the nested fallback for compatibility with older/self-hosted builds.
@@ -161,6 +168,35 @@ export class GhlSsoService {
     });
 
     return { tokenHash, organizationId: location.organization_id };
+  }
+
+  private async exchangeFirebase(
+    organizationId: string,
+    email: string,
+    fullName: string | undefined,
+    ghlUserId: string,
+    ghlRole: string | undefined,
+  ) {
+    if (!getApps().length) initializeApp({ credential: applicationDefault(), projectId: this.config.identity.firebaseProjectId });
+    const auth = getAuth();
+    const existing = await this.database.db
+      .selectFrom('capere.users')
+      .select('id')
+      .where('email', '=', email)
+      .executeTakeFirst();
+    const uid = existing?.id ?? (await auth.getUserByEmail(email).catch(() => undefined))?.uid ?? randomUUID();
+    await auth.getUser(uid).then(
+      () => auth.updateUser(uid, { email, displayName: fullName || undefined, disabled: false }),
+      () => auth.createUser({ uid, email, displayName: fullName || undefined, emailVerified: true }),
+    );
+    const role = this.roleFor(ghlRole);
+    await this.database.transaction(async (trx) => {
+      await sql`INSERT INTO auth.users (id, email) VALUES (${uid}::uuid, ${email}) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`.execute(trx);
+      await trx.insertInto('capere.users').values({ id: uid, email, full_name: fullName || null, avatar_url: null, last_seen_at: new Date() }).onConflict((conflict) => conflict.column('id').doUpdateSet({ email, full_name: fullName || null, last_seen_at: new Date(), updated_at: new Date() })).execute();
+      await trx.insertInto('capere.organization_members').values({ organization_id: organizationId, user_id: uid, role, invited_by: null }).onConflict((conflict) => conflict.columns(['organization_id', 'user_id']).doNothing()).execute();
+    });
+    const customToken = await auth.createCustomToken(uid, { ghl_user_id: ghlUserId });
+    return { customToken, organizationId };
   }
 
 
