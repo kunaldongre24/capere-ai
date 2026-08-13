@@ -20,6 +20,7 @@
     "test:watch": "vitest",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "migrate": "tsx src/shared/database/cli/migrate.ts up",
+    "migrate:runtime": "node dist/shared/database/cli/migrate-runtime.js",
     "migrate:down": "tsx src/shared/database/cli/migrate.ts down",
     "api-key:issue": "tsx src/auth/cli/issue-api-key.ts",
     "rag:rebuild-vectors": "tsx src/rag/cli/rebuild-vectors.ts",

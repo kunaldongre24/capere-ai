@@ -31,7 +31,7 @@ steps:
       - --set-env-vars=NODE_ENV=production,DATABASE_SSL_MODE=disable
       - --set-secrets=DATABASE_URL=CAPERE_CLOUDSQL_DATABASE_URL:latest
       - --command=pnpm
-      - --args=--filter,@capere/backend,migrate
+      - --args=--filter,@capere/backend,migrate:runtime
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     entrypoint: gcloud
     args:
