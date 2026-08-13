@@ -6,7 +6,7 @@ runConfig:
   memoryMiB: 512
 env:
   - variable: AUTH_PROVIDER
-    value: supabase
+    value: firebase
     availability: [BUILD, RUNTIME]
   - variable: FIREBASE_PROJECT_ID
     value: capere-ai-786a0
@@ -22,10 +22,4 @@ env:
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_CHAT_URL
     value: https://chat.capereai.com
-    availability: [BUILD, RUNTIME]
-  - variable: NEXT_PUBLIC_SUPABASE_URL
-    secret: CAPERE_SUPABASE_URL
-    availability: [BUILD, RUNTIME]
-  - variable: NEXT_PUBLIC_SUPABASE_ANON_KEY
-    secret: CAPERE_SUPABASE_ANON_KEY
     availability: [BUILD, RUNTIME]

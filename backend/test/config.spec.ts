@@ -37,7 +37,7 @@ describe('config', () => {
     const config = loadConfig(testEnv());
     expect(config.env).toBe('test');
     expect(config.isTest).toBe(true);
-    expect(config.port).toBe(3000);
+    expect(config.port).toBe(3001);
     expect(config.database.url).toContain('pooler.supabase.com');
     expect(config.supabase.mode).toBe('unconfigured');
     expect(config.openRouter.enabled).toBe(false);
@@ -52,16 +52,33 @@ describe('config', () => {
     expect(() => loadConfig(env)).toThrow(/DATABASE_URL/);
   });
 
-  it('lists every problem at once, not one at a time', () => {
+  it('uses the managed Redis default when Redis is not configured', () => {
     const env = testEnv();
-    delete env.DATABASE_URL;
     delete env.REDIS_URL;
+    expect(loadConfig(env).redis.url).toBe('redis://localhost:6379');
+  });
 
-    const error = (): void => {
-      loadConfig(env);
-    };
-    expect(error).toThrow(/DATABASE_URL/);
-    expect(error).toThrow(/REDIS_URL/);
+  it('accepts the fully managed production modes without Supabase or Redis credentials', () => {
+    const env = productionEnv({
+      AUTH_PROVIDER: 'firebase',
+      FIREBASE_PROJECT_ID: 'capere-ai-786a0',
+      JOB_DISPATCH_MODE: 'cloud_tasks',
+      GOOGLE_CLOUD_PROJECT: 'capere-ai-786a0',
+      MANAGED_TASK_AUDIENCE: 'https://capere-backend.example.run.app',
+      MANAGED_TASK_SERVICE_ACCOUNT: 'capere-tasks@capere-ai-786a0.iam.gserviceaccount.com',
+      RAG_STORAGE_PROVIDER: 'gcs',
+      RAG_STORAGE_BUCKET: 'capere-ai-786a0-rag-sources',
+      DATABASE_SSL_MODE: 'disable',
+      DATABASE_SSL_CA_BASE64: '',
+      SUPABASE_JWT_SECRET: '',
+      SUPABASE_PROJECT_URL: '',
+      DATABASE_SERVICE_ROLE_KEY: '',
+    });
+    delete env.REDIS_URL;
+    const config = loadConfig(env);
+    expect(config.identity.provider).toBe('firebase');
+    expect(config.jobs.dispatchMode).toBe('cloud_tasks');
+    expect(config.rag.storage.provider).toBe('gcs');
   });
 
   it('rejects a malformed encryption key', () => {

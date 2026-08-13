@@ -22,6 +22,7 @@ function database(): DatabaseService {
 }
 
 describe('Phase 5 recommendations and dashboard marts', () => {
+  const metricDate = new Date().toISOString().slice(0, 10);
   let fixture: Fixture;
   let recommendations: RecommendationService;
   let dashboards: DashboardService;
@@ -63,7 +64,7 @@ describe('Phase 5 recommendations and dashboard marts', () => {
           .then((row) => row.id),
         provider: 'google_analytics_4',
         resource_id: 'phase5',
-        metric_date: '2026-08-04',
+        metric_date: metricDate,
         metrics: JSON.stringify({ sessions: 100, conversions: 5, revenue: 2500 }),
       })
       .execute();
@@ -112,7 +113,7 @@ describe('Phase 5 recommendations and dashboard marts', () => {
         integration_id: secondIntegration.id,
         provider: 'google_analytics_4',
         resource_id: 'phase5-second',
-        metric_date: '2026-08-04',
+        metric_date: metricDate,
         metrics: JSON.stringify({ sessions: 50 }),
       })
       .execute();
@@ -126,11 +127,12 @@ describe('Phase 5 recommendations and dashboard marts', () => {
   });
 
   it('generates a persisted weekly report from precomputed evidence', async () => {
+    expect(await dashboards.refresh(fixture.orgAId)).toBeGreaterThan(0);
     const report = await dashboards.generateExecutiveReport(
       fixture.orgAId,
-      new Date('2026-08-04T00:00:00Z'),
+      new Date(`${metricDate}T00:00:00Z`),
     );
-    expect(report.title).toContain('2026-08-04');
+    expect(report.title).toContain(metricDate);
     expect(report.content).toContain('Observed metrics:');
     expect(await dashboards.latestReport(fixture.orgAId)).toMatchObject({ id: report.id });
     expect((await dashboards.cmoBrief(fixture.orgAId)).evidenceComplete).toBe(true);

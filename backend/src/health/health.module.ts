@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import Redis from 'ioredis';
+import { Storage } from '@google-cloud/storage';
 import { sql } from 'kysely';
 import { APP_CONFIG, type AppConfig } from '../shared/config';
 import { DatabaseService } from '../shared/database';
@@ -14,19 +15,21 @@ import { HealthService } from './health.service';
       provide: 'HEALTH_DEPENDENCIES',
       inject: [APP_CONFIG, HealthService, DatabaseService],
       useFactory: (config: AppConfig, health: HealthService, database: DatabaseService): void => {
-        health.register({
-          name: 'redis',
-          check: async () => {
-            const redis = new Redis(config.redis.url, { lazyConnect: true, connectTimeout: 2_000 });
-            try {
-              await redis.connect();
-              await redis.ping();
-              return { status: 'up' };
-            } finally {
-              await redis.quit().catch(() => redis.disconnect());
-            }
-          },
-        });
+        if (config.jobs.dispatchMode === 'redis') {
+          health.register({
+            name: 'redis',
+            check: async () => {
+              const redis = new Redis(config.redis.url, { lazyConnect: true, connectTimeout: 2_000 });
+              try {
+                await redis.connect();
+                await redis.ping();
+                return { status: 'up' };
+              } finally {
+                await redis.quit().catch(() => redis.disconnect());
+              }
+            },
+          });
+        }
         if (config.vectorStore.provider === 'qdrant') {
           health.register({
             name: 'qdrant',
@@ -51,7 +54,7 @@ import { HealthService } from './health.service';
             },
           });
         }
-        if (config.supabase.projectUrl && config.database.serviceRoleKey) {
+        if (config.rag.storage.provider === 'supabase' && config.supabase.projectUrl && config.database.serviceRoleKey) {
           health.register({
             name: 'supabase-storage',
             check: async () => {
@@ -68,6 +71,16 @@ import { HealthService } from './health.service';
               return response.ok
                 ? { status: 'up' as const }
                 : { status: 'down' as const, error: `HTTP ${response.status}` };
+            },
+          });
+        } else if (config.rag.storage.provider === 'gcs') {
+          health.register({
+            name: 'gcs-storage',
+            check: async () => {
+              const [exists] = await new Storage().bucket(config.rag.storage.bucket).exists();
+              return exists
+                ? { status: 'up' as const }
+                : { status: 'down' as const, error: 'bucket not found' };
             },
           });
         }

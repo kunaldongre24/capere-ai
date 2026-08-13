@@ -6,4 +6,7 @@ Copy `.env.example` to `.env.local`, set the Supabase public URL/key and API URL
 
 Authentication uses Supabase SSR cookies. Browser code never receives an API or provider secret. `/api/capere/*` is a server-side BFF forwarding the user's Supabase bearer token to the backend.
 
-For deployment, create the `CAPERE_SUPABASE_URL` and `CAPERE_SUPABASE_ANON_KEY` Firebase secrets, connect the repository, map the custom domain, and set Supabase's redirect URL to `https://app.capereai.com/auth/callback`.
+For deployment, create the `CAPERE_FIREBASE_WEB_API_KEY` App Hosting secret,
+connect the repository, and map the custom domain. Authentication is established
+only through the verified GoHighLevel embedded SSO flow; there is no standalone
+Capere login form.

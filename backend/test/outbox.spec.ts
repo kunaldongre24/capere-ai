@@ -26,9 +26,11 @@ describe('OutboxService reliability', () => {
   });
 
   beforeEach(async () => {
-    // The relay is intentionally global; isolate this contract suite from
-    // events emitted by other integration fixtures in the shared test DB.
-    await serviceDb().deleteFrom('capere.domain_events').execute();
+    await serviceDb()
+      .updateTable('capere.domain_events')
+      .set({ consumed_at: new Date(), claimed_at: null, claim_token: null, attempts: 0 })
+      .where('organization_id', 'in', [fixture.orgAId, fixture.orgBId])
+      .execute();
   });
 
   afterAll(async () => {

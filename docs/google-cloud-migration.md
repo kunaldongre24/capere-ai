@@ -17,10 +17,12 @@ Switch them independently in staging, then together during production cutover.
 
 Run `scripts/cloud/provision.sh` with an authenticated `gcloud` CLI. The script
 creates the regional Cloud SQL instance, Artifact Registry repository, Cloud
-Tasks queue, private RAG bucket, service accounts, IAM grants, and Scheduler
-jobs when the API service already exists.
+Tasks queue, private RAG bucket, service accounts, and IAM grants. Scheduler
+jobs are intentionally disabled by default; set
+`CAPERE_ENABLE_SCHEDULERS=true` only during the cutover window after PM2
+workers have been stopped.
 
-Deploy the backend with `cloudbuild.backend.yaml`. Store all values currently
+Deploy the fully managed backend with `cloudbuild.backend.yaml`. Store all values currently
 held in `.env` in Secret Manager and attach them to the Cloud Run service. Never
 place provider credentials or encryption keys directly in Cloud Build YAML.
 Use a Cloud SQL Unix-socket connection string with `DATABASE_SSL_MODE=disable`;
@@ -42,12 +44,16 @@ authenticated` so the existing RLS policies remain the tenant backstop.
 7. Move `api.capereai.com` only after direct Cloud Run verification.
 8. Keep the VPS stopped but recoverable for at least seven days.
 
+The rehearsal completed against the managed snapshot with exact validation:
+12 organizations, 8 users, 1,064 rows, 48 RLS-enabled tables, and 63 RLS
+policies. The isolated managed Cloud Run revision also passed readiness for
+Cloud SQL, pgvector, GCS, and OpenRouter. This does not switch production
+traffic.
+
 Do not run the PM2 worker and Cloud Scheduler/Tasks against the same production
 database simultaneously.
 
-The checked-in Cloud Build definition deliberately deploys in compatibility
-mode (`supabase` auth/storage and `redis` dispatch). After the final Cloud SQL
-restore and staging validation, update the Cloud Run revision to:
+The checked-in `cloudbuild.backend.yaml` deploys the final managed runtime with:
 
 - `AUTH_PROVIDER=firebase`
 - `FIREBASE_PROJECT_ID=capere-ai-786a0`
@@ -61,6 +67,29 @@ restore and staging validation, update the Cloud Run revision to:
 - `RAG_STORAGE_PROVIDER=gcs`
 - `RAG_STORAGE_BUCKET=capere-ai-786a0-rag-sources`
 
-Only then change App Hosting `AUTH_PROVIDER` from `supabase` to `firebase` and
-provide `CAPERE_FIREBASE_WEB_API_KEY`. This ordering prevents an authentication
-outage during incremental deployment.
+`cloudbuild.backend.compat.yaml` is the explicit rollback build for the retained
+Supabase/Redis environment. Do not use it for normal production deployments.
+
+The App Hosting manifest is configured for Firebase Auth and requires the
+`CAPERE_FIREBASE_WEB_API_KEY` secret. Deploy it only after the managed backend
+is serving `api.capereai.com`; deploying the frontend first would make its
+Firebase session cookies incompatible with the compatibility backend.
+
+For a pre-DNS managed deployment, override `_SERVICE` and `_PUBLIC_API_URL`:
+
+```bash
+gcloud builds submit --region asia-south1 \
+  --config cloudbuild.backend.yaml \
+  --substitutions=_SERVICE=capere-backend-managed,_PUBLIC_API_URL=https://MANAGED_SERVICE_URL .
+```
+
+During cutover, deploy the default `capere-backend` service with
+`_PUBLIC_API_URL=https://api.capereai.com`, verify it directly, update DNS, then
+deploy App Hosting. Enable schedulers last with both task values explicit:
+
+```bash
+CAPERE_ENABLE_SCHEDULERS=true \
+CAPERE_MANAGED_TASK_URL=https://api.capereai.com \
+CAPERE_MANAGED_TASK_AUDIENCE=https://api.capereai.com \
+scripts/cloud/provision.sh
+```

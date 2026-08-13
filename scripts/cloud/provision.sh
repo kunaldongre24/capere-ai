@@ -7,6 +7,9 @@ API_SERVICE="${CAPERE_API_SERVICE:-capere-backend}"
 SQL_INSTANCE="${CAPERE_SQL_INSTANCE:-capere-postgres}"
 TASK_QUEUE="${CAPERE_TASK_QUEUE:-capere-integration-jobs}"
 RAG_BUCKET="${CAPERE_RAG_BUCKET:-${PROJECT_ID}-rag-sources}"
+ENABLE_SCHEDULERS="${CAPERE_ENABLE_SCHEDULERS:-false}"
+MANAGED_TASK_URL="${CAPERE_MANAGED_TASK_URL:-}"
+MANAGED_TASK_AUDIENCE="${CAPERE_MANAGED_TASK_AUDIENCE:-$MANAGED_TASK_URL}"
 
 gcloud services enable \
   artifactregistry.googleapis.com \
@@ -31,6 +34,7 @@ done
 gcloud sql instances describe "$SQL_INSTANCE" --project "$PROJECT_ID" >/dev/null 2>&1 || \
   gcloud sql instances create "$SQL_INSTANCE" \
     --database-version POSTGRES_17 \
+    --edition ENTERPRISE \
     --region "$REGION" \
     --tier db-custom-2-7680 \
     --storage-type SSD \
@@ -52,14 +56,19 @@ gcloud storage buckets describe "gs://$RAG_BUCKET" --project "$PROJECT_ID" >/dev
 
 gcloud storage buckets update "gs://$RAG_BUCKET" --versioning --project "$PROJECT_ID"
 
-gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/cloudsql.client >/dev/null
-gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/cloudtasks.enqueuer >/dev/null
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/cloudsql.client --condition=None >/dev/null
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/cloudtasks.enqueuer --condition=None >/dev/null
 gcloud storage buckets add-iam-policy-binding "gs://$RAG_BUCKET" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/storage.objectAdmin >/dev/null
-gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/secretmanager.secretAccessor >/dev/null
+gcloud storage buckets add-iam-policy-binding "gs://$RAG_BUCKET" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/storage.legacyBucketReader >/dev/null
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/secretmanager.secretAccessor --condition=None >/dev/null
 gcloud iam service-accounts add-iam-policy-binding "capere-tasks@$PROJECT_ID.iam.gserviceaccount.com" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/iam.serviceAccountUser --project "$PROJECT_ID" >/dev/null
+gcloud iam service-accounts add-iam-policy-binding "capere-api@$PROJECT_ID.iam.gserviceaccount.com" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/iam.serviceAccountTokenCreator --condition=None --project "$PROJECT_ID" >/dev/null
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/firebaseauth.admin --condition=None >/dev/null
 
 API_URL="$(gcloud run services describe "$API_SERVICE" --region "$REGION" --project "$PROJECT_ID" --format='value(status.url)' 2>/dev/null || true)"
-if [[ -n "$API_URL" ]]; then
+if [[ "$ENABLE_SCHEDULERS" == "true" && -n "$API_URL" ]]; then
+  MANAGED_TASK_URL="${MANAGED_TASK_URL:-$API_URL}"
+  MANAGED_TASK_AUDIENCE="${MANAGED_TASK_AUDIENCE:-$MANAGED_TASK_URL}"
   gcloud run services add-iam-policy-binding "$API_SERVICE" --region "$REGION" --project "$PROJECT_ID" --member "serviceAccount:capere-tasks@$PROJECT_ID.iam.gserviceaccount.com" --role roles/run.invoker >/dev/null
   for job in scheduler outbox rag; do
     case "$job" in
@@ -68,11 +77,13 @@ if [[ -n "$API_URL" ]]; then
       rag) path="rag/tick"; schedule="*/1 * * * *" ;;
     esac
     gcloud scheduler jobs describe "capere-$job" --location "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1 && \
-      gcloud scheduler jobs update http "capere-$job" --location "$REGION" --schedule "$schedule" --uri "$API_URL/api/v1/internal/jobs/$path" --http-method POST --oidc-service-account-email "capere-tasks@$PROJECT_ID.iam.gserviceaccount.com" --oidc-token-audience "$API_URL" --project "$PROJECT_ID" >/dev/null || \
-      gcloud scheduler jobs create http "capere-$job" --location "$REGION" --schedule "$schedule" --uri "$API_URL/api/v1/internal/jobs/$path" --http-method POST --oidc-service-account-email "capere-tasks@$PROJECT_ID.iam.gserviceaccount.com" --oidc-token-audience "$API_URL" --project "$PROJECT_ID" >/dev/null
+      gcloud scheduler jobs update http "capere-$job" --location "$REGION" --schedule "$schedule" --uri "$MANAGED_TASK_URL/api/v1/internal/jobs/$path" --http-method POST --oidc-service-account-email "capere-tasks@$PROJECT_ID.iam.gserviceaccount.com" --oidc-token-audience "$MANAGED_TASK_AUDIENCE" --project "$PROJECT_ID" >/dev/null || \
+      gcloud scheduler jobs create http "capere-$job" --location "$REGION" --schedule "$schedule" --uri "$MANAGED_TASK_URL/api/v1/internal/jobs/$path" --http-method POST --oidc-service-account-email "capere-tasks@$PROJECT_ID.iam.gserviceaccount.com" --oidc-token-audience "$MANAGED_TASK_AUDIENCE" --project "$PROJECT_ID" >/dev/null
   done
-else
+elif [[ "$ENABLE_SCHEDULERS" == "true" ]]; then
   echo "Cloud Run service $API_SERVICE is not deployed yet; scheduler jobs were not created."
+else
+  echo "Managed schedulers remain disabled. Set CAPERE_ENABLE_SCHEDULERS=true only during cutover after stopping PM2 workers."
 fi
 
 echo "Provisioning complete for project $PROJECT_ID in $REGION."
