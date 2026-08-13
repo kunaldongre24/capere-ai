@@ -22,6 +22,11 @@ jobs are intentionally disabled by default; set
 `CAPERE_ENABLE_SCHEDULERS=true` only during the cutover window after PM2
 workers have been stopped.
 
+Provisioning also initializes the Firebase Authentication configuration. Merely
+enabling `identitytoolkit.googleapis.com` is insufficient; without the one-time
+initialization Firebase Admin user provisioning fails with
+`CONFIGURATION_NOT_FOUND` during embedded GoHighLevel SSO.
+
 Deploy the fully managed backend with `cloudbuild.backend.yaml`. Store all values currently
 held in `.env` in Secret Manager and attach them to the Cloud Run service. Never
 place provider credentials or encryption keys directly in Cloud Build YAML.
@@ -74,6 +79,15 @@ The App Hosting manifest is configured for Firebase Auth and requires the
 `CAPERE_FIREBASE_WEB_API_KEY` secret. Deploy it only after the managed backend
 is serving `api.capereai.com`; deploying the frontend first would make its
 Firebase session cookies incompatible with the compatibility backend.
+
+Embedded SSO exchanges the short-lived Firebase ID token for an eight-hour,
+HTTP-only Firebase session cookie on the backend. Do not store a raw one-hour ID
+token as the browser session or an iframe left open during the workday will
+silently lose API access.
+
+The managed integration queue retains the former BullMQ retry policy: five
+attempts with exponential backoff. Avoid Cloud Tasks' default 100 attempts,
+which can amplify permanent provider failures and duplicate external work.
 
 For a pre-DNS managed deployment, override `_SERVICE` and `_PUBLIC_API_URL`:
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 type ExchangeResponse = { data?: { tokenHash?: string; customToken?: string; organizationId?: string }; error?: { code?: string; message?: string } };
+type FirebaseSessionResponse = { data?: { sessionCookie?: string; expiresInSeconds?: number }; error?: { code?: string; message?: string } };
 
 export async function POST(request: NextRequest) {
   const payload = (await request.json().catch(() => null)) as { encryptedData?: unknown } | null;
@@ -17,7 +18,12 @@ export async function POST(request: NextRequest) {
     const tokenResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${encodeURIComponent(process.env.FIREBASE_WEB_API_KEY)}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: result.data.customToken, returnSecureToken: true }), cache: 'no-store' });
     const tokenBody = await tokenResponse.json().catch(() => ({})) as { idToken?: string };
     if (!tokenResponse.ok || !tokenBody.idToken) return NextResponse.json({ error: { code: 'SSO_SESSION_FAILED', message: 'A Firebase session could not be created' } }, { status: 401 });
-    response.cookies.set('__session', tokenBody.idToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', path: '/', maxAge: 60 * 60 });
+    const sessionResponse = await fetch(`${process.env.CAPERE_API_URL ?? 'http://localhost:3001'}/api/v1/auth/ghl-sso/session`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ idToken: tokenBody.idToken }), cache: 'no-store',
+    });
+    const sessionBody = await sessionResponse.json().catch(() => ({})) as FirebaseSessionResponse;
+    if (!sessionResponse.ok || !sessionBody.data?.sessionCookie) return NextResponse.json({ error: sessionBody.error ?? { code: 'SSO_SESSION_FAILED', message: 'A Firebase session could not be created' } }, { status: sessionResponse.status || 401 });
+    response.cookies.set('__session', sessionBody.data.sessionCookie, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', path: '/', maxAge: sessionBody.data.expiresInSeconds ?? 60 * 60 * 8 });
   } else {
     if (!result.data.tokenHash) return NextResponse.json({ error: { code: 'SSO_SESSION_FAILED', message: 'Supabase authentication is not configured' } }, { status: 503 });
     const supabase = await createSupabaseServerClient();

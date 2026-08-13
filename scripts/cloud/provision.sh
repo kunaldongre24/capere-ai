@@ -23,6 +23,27 @@ gcloud services enable \
   cloudbuild.googleapis.com \
   --project "$PROJECT_ID"
 
+# Enabling Identity Toolkit does not create the Firebase Auth configuration.
+# Without this one-time initialization, Firebase Admin user provisioning fails
+# with CONFIGURATION_NOT_FOUND during embedded GoHighLevel SSO.
+ACCESS_TOKEN="$(gcloud auth print-access-token)"
+AUTH_CONFIG_URL="https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT_ID/config"
+AUTH_CONFIG_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "x-goog-user-project: $PROJECT_ID" \
+  "$AUTH_CONFIG_URL")"
+if [[ "$AUTH_CONFIG_STATUS" == "404" ]]; then
+  curl -fsS -X POST \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
+    -H "x-goog-user-project: $PROJECT_ID" \
+    -H 'Content-Type: application/json' \
+    -d '{}' \
+    "https://identitytoolkit.googleapis.com/v2/projects/$PROJECT_ID/identityPlatform:initializeAuth" >/dev/null
+elif [[ "$AUTH_CONFIG_STATUS" != "200" ]]; then
+  echo "Could not inspect Firebase Auth configuration (HTTP $AUTH_CONFIG_STATUS)" >&2
+  exit 1
+fi
+
 gcloud artifacts repositories describe capere --location "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1 || \
   gcloud artifacts repositories create capere --repository-format docker --location "$REGION" --project "$PROJECT_ID"
 
@@ -49,7 +70,16 @@ gcloud sql databases describe capere --instance "$SQL_INSTANCE" --project "$PROJ
   gcloud sql databases create capere --instance "$SQL_INSTANCE" --project "$PROJECT_ID"
 
 gcloud tasks queues describe "$TASK_QUEUE" --location "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1 || \
-  gcloud tasks queues create "$TASK_QUEUE" --location "$REGION" --max-concurrent-dispatches 10 --max-dispatches-per-second 10 --project "$PROJECT_ID"
+  gcloud tasks queues create "$TASK_QUEUE" --location "$REGION" --max-concurrent-dispatches 10 --max-dispatches-per-second 10 --max-attempts 5 --min-backoff 5s --max-backoff 1h --max-doublings 8 --project "$PROJECT_ID"
+gcloud tasks queues update "$TASK_QUEUE" \
+  --location "$REGION" \
+  --max-concurrent-dispatches 10 \
+  --max-dispatches-per-second 10 \
+  --max-attempts 5 \
+  --min-backoff 5s \
+  --max-backoff 1h \
+  --max-doublings 8 \
+  --project "$PROJECT_ID" >/dev/null
 
 gcloud storage buckets describe "gs://$RAG_BUCKET" --project "$PROJECT_ID" >/dev/null 2>&1 || \
   gcloud storage buckets create "gs://$RAG_BUCKET" --location "$REGION" --uniform-bucket-level-access --public-access-prevention --project "$PROJECT_ID"

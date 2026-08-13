@@ -95,7 +95,9 @@ export class JwtVerifierService {
   async verify(token: string): Promise<AuthenticatedUser> {
     if (this.firebaseAuth) {
       try {
-        const payload = await this.firebaseAuth.verifySessionCookie(token, true).catch(() => this.firebaseAuth!.verifyIdToken(token, true));
+        const payload = await this.firebaseAuth
+          .verifySessionCookie(token, true)
+          .catch(() => this.firebaseAuth!.verifyIdToken(token, true));
         return {
           id: payload.uid,
           email: payload.email,
@@ -163,6 +165,9 @@ export class JwtVerifierService {
 
     // jose error codes are stable and worth mapping precisely.
     if (code === 'ERR_JWT_EXPIRED') {
+      return AppException.unauthorized(ErrorCode.TOKEN_EXPIRED, 'Token has expired');
+    }
+    if (code === 'auth/id-token-expired' || code === 'auth/session-cookie-expired') {
       return AppException.unauthorized(ErrorCode.TOKEN_EXPIRED, 'Token has expired');
     }
     if (code === 'ERR_JWT_CLAIM_VALIDATION_FAILED') {

@@ -6,3 +6,10 @@ export class ExchangeGhlSsoDto {
   @MaxLength(16_384)
   encryptedData!: string;
 }
+
+export class CreateFirebaseSessionDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(16_384)
+  idToken!: string;
+}

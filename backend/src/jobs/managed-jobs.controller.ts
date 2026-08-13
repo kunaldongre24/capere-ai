@@ -31,13 +31,25 @@ export class ManagedJobsController {
   @Post('outbox/tick')
   async outboxTick(@Headers('authorization') authorization?: string, @Headers('x-capere-task-secret') secret?: string) {
     await this.authorize(authorization, secret);
-    return { processed: await this.outbox.tick() };
+    const startedAt = Date.now();
+    let processed = 0;
+    let batch = 0;
+    do {
+      batch = await this.outbox.tick();
+      processed += batch;
+    } while (batch === 50 && processed < 500 && Date.now() - startedAt < 50_000);
+    return { processed };
   }
 
   @Post('rag/tick')
   async ragTick(@Headers('authorization') authorization?: string, @Headers('x-capere-task-secret') secret?: string) {
     await this.authorize(authorization, secret);
-    return { processed: await this.rag.tick() };
+    const startedAt = Date.now();
+    let processed = 0;
+    while (processed < 10 && Date.now() - startedAt < 50_000 && await this.rag.tick()) {
+      processed += 1;
+    }
+    return { processed };
   }
 
   @Post('integrations/execute')

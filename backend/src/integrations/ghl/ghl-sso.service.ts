@@ -57,6 +57,7 @@ export function decryptGhlSsoData(encryptedData: string, sharedSecret: string): 
 
 @Injectable()
 export class GhlSsoService {
+  static readonly FIREBASE_SESSION_MS = 8 * 60 * 60 * 1000;
   private readonly logger = new Logger(GhlSsoService.name);
 
   constructor(
@@ -170,6 +171,37 @@ export class GhlSsoService {
     return { tokenHash, organizationId: location.organization_id };
   }
 
+  async createFirebaseSession(idToken: string) {
+    if (this.config.identity.provider !== 'firebase') {
+      throw AppException.serviceUnavailable(
+        ErrorCode.SERVICE_UNAVAILABLE,
+        'Firebase authentication is not configured',
+      );
+    }
+    const auth = this.firebaseAuth();
+    try {
+      const decoded = await auth.verifyIdToken(idToken, true);
+      if (!decoded.auth_time || Date.now() / 1000 - decoded.auth_time > 5 * 60) {
+        throw new Error('Firebase sign-in is no longer recent');
+      }
+      const sessionCookie = await auth.createSessionCookie(idToken, {
+        expiresIn: GhlSsoService.FIREBASE_SESSION_MS,
+      });
+      return {
+        sessionCookie,
+        expiresInSeconds: GhlSsoService.FIREBASE_SESSION_MS / 1000,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Firebase session creation failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw AppException.unauthorized(
+        ErrorCode.INVALID_TOKEN,
+        'Firebase identity token could not be verified',
+      );
+    }
+  }
+
   private async exchangeFirebase(
     organizationId: string,
     email: string,
@@ -177,18 +209,26 @@ export class GhlSsoService {
     ghlUserId: string,
     ghlRole: string | undefined,
   ) {
-    if (!getApps().length) initializeApp({ credential: applicationDefault(), projectId: this.config.identity.firebaseProjectId });
-    const auth = getAuth();
+    const auth = this.firebaseAuth();
     const existing = await this.database.db
       .selectFrom('capere.users')
       .select('id')
       .where('email', '=', email)
       .executeTakeFirst();
-    const uid = existing?.id ?? (await auth.getUserByEmail(email).catch(() => undefined))?.uid ?? randomUUID();
-    await auth.getUser(uid).then(
-      () => auth.updateUser(uid, { email, displayName: fullName || undefined, disabled: false }),
-      () => auth.createUser({ uid, email, displayName: fullName || undefined, emailVerified: true }),
-    );
+    const firebaseUser = existing
+      ? undefined
+      : await auth.getUserByEmail(email).catch((error: unknown) => {
+          if (this.firebaseUserNotFound(error)) return undefined;
+          throw error;
+        });
+    const uid = existing?.id ?? firebaseUser?.uid ?? randomUUID();
+    try {
+      await auth.getUser(uid);
+      await auth.updateUser(uid, { email, displayName: fullName || undefined, disabled: false });
+    } catch (error) {
+      if (!this.firebaseUserNotFound(error)) throw error;
+      await auth.createUser({ uid, email, displayName: fullName || undefined, emailVerified: true });
+    }
     const role = this.roleFor(ghlRole);
     await this.database.transaction(async (trx) => {
       await sql`INSERT INTO auth.users (id, email) VALUES (${uid}::uuid, ${email}) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`.execute(trx);
@@ -197,6 +237,20 @@ export class GhlSsoService {
     });
     const customToken = await auth.createCustomToken(uid, { ghl_user_id: ghlUserId });
     return { customToken, organizationId };
+  }
+
+  private firebaseAuth() {
+    if (!getApps().length) {
+      initializeApp({
+        credential: applicationDefault(),
+        projectId: this.config.identity.firebaseProjectId,
+      });
+    }
+    return getAuth();
+  }
+
+  private firebaseUserNotFound(error: unknown): boolean {
+    return (error as { code?: string })?.code === 'auth/user-not-found';
   }
 
 
