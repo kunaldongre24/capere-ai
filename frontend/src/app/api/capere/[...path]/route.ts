@@ -6,7 +6,27 @@ type ProxyContext = { params: Promise<{ path: string[] }> };
 async function proxy(request: NextRequest, { params }: ProxyContext) {
   const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(request.method);
   const origin = request.headers.get('origin');
-  if (unsafe && origin && origin !== request.nextUrl.origin) {
+  // The app can be served through the GHL white-label hostname while the
+  // browser resolves API requests against the canonical Capere hostname.
+  // Treat both first-party hosts (and GHL's iframe hosts) as trusted origins;
+  // the authenticated session cookie and backend authorization remain the
+  // actual access controls.
+  const trustedOrigins = new Set([
+    request.nextUrl.origin,
+    'https://app.capereai.com',
+    'https://dashboard.capereai.com',
+    'https://app.gohighlevel.com',
+    'https://app.leadconnectorhq.com',
+  ]);
+  const trustedGhlOrigin = (() => {
+    try {
+      const host = new URL(origin ?? '').hostname.toLowerCase();
+      return host.endsWith('.gohighlevel.com') || host.endsWith('.leadconnectorhq.com');
+    } catch {
+      return false;
+    }
+  })();
+  if (unsafe && origin && !trustedOrigins.has(origin) && !trustedGhlOrigin) {
     return NextResponse.json(
       { error: { code: 'FORBIDDEN', message: 'Cross-origin request rejected' } },
       { status: 403 },
