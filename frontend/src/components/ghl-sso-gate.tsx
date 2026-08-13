@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 const parentOriginAllowed = (origin: string) => {
   try {
     const host = new URL(origin).hostname.toLowerCase();
-    return host === 'app.gohighlevel.com' || host.endsWith('.gohighlevel.com') || host === 'app.leadconnectorhq.com' || host.endsWith('.leadconnectorhq.com');
+    return host === 'dashboard.capereai.com' || host === 'app.gohighlevel.com' || host.endsWith('.gohighlevel.com') || host === 'app.leadconnectorhq.com' || host.endsWith('.leadconnectorhq.com');
   } catch { return false; }
 };
 

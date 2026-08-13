@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
       {
         key: 'Content-Security-Policy',
         value:
-          "frame-ancestors 'self' https://app.gohighlevel.com https://*.gohighlevel.com https://app.leadconnectorhq.com https://*.leadconnectorhq.com;",
+          "frame-ancestors 'self' https://dashboard.capereai.com https://app.gohighlevel.com https://*.gohighlevel.com https://app.leadconnectorhq.com https://*.leadconnectorhq.com;",
       },
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
     ];
