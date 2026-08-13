@@ -28,8 +28,8 @@ steps:
       - --region=${_REGION}
       - --service-account=capere-api@$PROJECT_ID.iam.gserviceaccount.com
       - --set-cloudsql-instances=$PROJECT_ID:${_REGION}:capere-postgres
-      - --set-env-vars=NODE_ENV=production,DATABASE_SSL_MODE=disable
-      - --set-secrets=DATABASE_URL=CAPERE_CLOUDSQL_DATABASE_URL:latest
+      - --set-env-vars=NODE_ENV=production,DATABASE_SSL_MODE=disable,CLOUD_SQL_INSTANCE=$PROJECT_ID:${_REGION}:capere-postgres
+      - --set-secrets=DATABASE_MIGRATION_PASSWORD=CAPERE_CLOUDSQL_MIGRATION_PASSWORD:latest
       - --command=pnpm
       - --args=--filter,@capere/backend,migrate:runtime
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
