@@ -95,7 +95,7 @@ export class JwtVerifierService {
   async verify(token: string): Promise<AuthenticatedUser> {
     if (this.firebaseAuth) {
       try {
-        const payload = await this.firebaseAuth.verifySessionCookie(token, true);
+        const payload = await this.firebaseAuth.verifySessionCookie(token, true).catch(() => this.firebaseAuth!.verifyIdToken(token, true));
         return {
           id: payload.uid,
           email: payload.email,

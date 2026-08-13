@@ -4,18 +4,6 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   poweredByHeader: false,
   experimental: { serverActions: { bodySizeLimit: '2mb' } },
-  outputFileTracingIncludes: {
-    '/*': [
-      './node_modules/firebase-admin/**/*',
-      './node_modules/google-auth-library/**/*',
-      './node_modules/jsonwebtoken/**/*',
-      './node_modules/jwks-rsa/**/*',
-      './node_modules/fast-deep-equal/**/*',
-      './node_modules/@fastify/busboy/**/*',
-      './node_modules/@firebase/**/*',
-      './node_modules/client-only/**/*',
-    ],
-  },
   async headers() {
     const embeddedHeaders = [
       {

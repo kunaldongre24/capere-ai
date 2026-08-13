@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { firebaseAdminAuth } from '@/lib/firebase/admin';
 
 type ExchangeResponse = { data?: { tokenHash?: string; customToken?: string; organizationId?: string }; error?: { code?: string; message?: string } };
 
@@ -18,8 +17,7 @@ export async function POST(request: NextRequest) {
     const tokenResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${encodeURIComponent(process.env.FIREBASE_WEB_API_KEY)}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: result.data.customToken, returnSecureToken: true }), cache: 'no-store' });
     const tokenBody = await tokenResponse.json().catch(() => ({})) as { idToken?: string };
     if (!tokenResponse.ok || !tokenBody.idToken) return NextResponse.json({ error: { code: 'SSO_SESSION_FAILED', message: 'A Firebase session could not be created' } }, { status: 401 });
-    const sessionCookie = await firebaseAdminAuth().createSessionCookie(tokenBody.idToken, { expiresIn: 8 * 60 * 60 * 1000 });
-    response.cookies.set('__session', sessionCookie, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', path: '/', maxAge: 60 * 60 * 8 });
+    response.cookies.set('__session', tokenBody.idToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', path: '/', maxAge: 60 * 60 });
   } else {
     if (!result.data.tokenHash) return NextResponse.json({ error: { code: 'SSO_SESSION_FAILED', message: 'Supabase authentication is not configured' } }, { status: 503 });
     const supabase = await createSupabaseServerClient();
