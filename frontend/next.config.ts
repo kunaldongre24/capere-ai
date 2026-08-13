@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
         // menu. GHL renders them in an iframe, so they need an explicit,
         // narrow frame policy instead of the default X-Frame-Options policy.
         source: '/embed/:path*',
-        headers: embeddedHeaders,
+        headers: [...embeddedHeaders,{key:'X-Robots-Tag',value:'noindex, nofollow'},{key:'Referrer-Policy',value:'no-referrer'}],
       },
       // Tab changes currently use the canonical routes. Keep those responses
       // frameable as well so navigating inside the GHL menu never breaks out.

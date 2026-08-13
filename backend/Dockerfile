@@ -11,6 +11,7 @@ COPY backend/package.json ./backend/package.json
 RUN pnpm install --frozen-lockfile --filter @capere/backend --config.confirmModulesPurge=false
 
 COPY backend ./backend
+COPY supabase ./supabase
 RUN pnpm --filter @capere/backend build
 
 # --- Stage 2: runtime ---
@@ -28,6 +29,7 @@ COPY --from=build /app/pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile --filter @capere/backend --prod --config.confirmModulesPurge=false
 
 COPY --from=build /app/backend/dist ./backend/dist
+COPY --from=build /app/supabase/migrations ./supabase/migrations
 
 EXPOSE 3000
 

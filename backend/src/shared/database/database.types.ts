@@ -355,6 +355,7 @@ export interface ApiKeysTable {
   key_prefix: string;
   key_hash: string;
   roles: Generated<OrgRole[]>;
+  purpose: Generated<string>;
   ghl_location_id: string | null;
   expires_at: Timestamp | null;
   revoked_at: Timestamp | null;

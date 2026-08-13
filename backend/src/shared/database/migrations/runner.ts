@@ -13,7 +13,7 @@ import { resolveSsl } from '../ssl';
  * The migration target is the configured Supabase PostgreSQL project.
  */
 
-const DEFAULT_DIR = path.resolve(__dirname, '../../../../../supabase/migrations');
+const DEFAULT_DIR = path.resolve(__dirname, '../../../../supabase/migrations');
 
 interface MigrationRow {
   name: string;

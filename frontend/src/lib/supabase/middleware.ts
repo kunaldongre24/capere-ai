@@ -10,7 +10,7 @@ const iframeCookieOptions = (options: CookieOptions): CookieOptions =>
 export async function updateSession(request: NextRequest) {
   if (process.env.AUTH_PROVIDER === 'firebase') {
     const authenticated = Boolean(request.cookies.get('__session')?.value);
-    const publicPath = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/auth/') || request.nextUrl.pathname.startsWith('/embed/') || request.nextUrl.pathname === '/api/auth/ghl-sso';
+    const publicPath = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/auth/') || request.nextUrl.pathname.startsWith('/embed/') || request.nextUrl.pathname.startsWith('/api/embed/') || request.nextUrl.pathname === '/api/auth/ghl-sso';
     if (!authenticated && !publicPath) {
       const url=request.nextUrl.clone(); url.pathname='/login'; url.search=''; url.searchParams.set('next',`${request.nextUrl.pathname}${request.nextUrl.search}`); return NextResponse.redirect(url);
     }
@@ -25,7 +25,7 @@ export async function updateSession(request: NextRequest) {
     },
   });
   const { data: { user } } = await supabase.auth.getUser();
-  const publicPath = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/auth/') || request.nextUrl.pathname.startsWith('/embed/') || request.nextUrl.pathname === '/api/auth/ghl-sso';
+  const publicPath = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/auth/') || request.nextUrl.pathname.startsWith('/embed/') || request.nextUrl.pathname.startsWith('/api/embed/') || request.nextUrl.pathname === '/api/auth/ghl-sso';
   if (!user && !publicPath) {
     const url=request.nextUrl.clone();
     const returnTo=`${request.nextUrl.pathname}${request.nextUrl.search}`;

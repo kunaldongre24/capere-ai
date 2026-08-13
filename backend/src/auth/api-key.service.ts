@@ -9,6 +9,7 @@ export interface ResolvedApiKey {
   readonly organizationId: string;
   readonly roles: OrgRole[];
   readonly ghlLocationId?: string;
+  readonly purpose: string;
 }
 
 /**
@@ -65,6 +66,7 @@ export class ApiKeyService {
         'k.organization_id',
         sql<OrgRole[]>`k.roles::text[]`.as('roles'),
         'k.ghl_location_id',
+        'k.purpose',
         'k.expires_at',
         'k.revoked_at',
         'o.status as organization_status',
@@ -116,6 +118,7 @@ export class ApiKeyService {
       organizationId: record.organization_id,
       roles: record.roles,
       ghlLocationId: record.ghl_location_id ?? undefined,
+      purpose: record.purpose,
     };
   }
 
@@ -137,6 +140,7 @@ export class ApiKeyService {
     createdBy?: string;
     expiresAt?: Date;
     ghlLocationId?: string;
+    purpose?: string;
   }): Promise<{ id: string; rawKey: string; prefix: string }> {
     if (!params.name.trim()) {
       throw AppException.badRequest(ErrorCode.VALIDATION_FAILED, 'An API key name is required');
@@ -201,11 +205,20 @@ export class ApiKeyService {
         created_by: params.createdBy ?? null,
         expires_at: params.expiresAt ?? null,
         ghl_location_id: params.ghlLocationId ?? null,
+        purpose: params.purpose ?? 'general',
       })
       .returning('id')
       .executeTakeFirstOrThrow();
 
     return { id: inserted.id, rawKey: raw, prefix };
+  }
+
+  async verifyForPurpose(rawKey: string, purpose: string): Promise<ResolvedApiKey> {
+    const resolved = await this.verify(rawKey);
+    if (resolved.purpose !== purpose || !resolved.ghlLocationId) {
+      throw AppException.unauthorized(ErrorCode.INVALID_API_KEY, 'Embed key is not valid');
+    }
+    return resolved;
   }
 
   async revoke(apiKeyId: string, organizationId: string): Promise<void> {
