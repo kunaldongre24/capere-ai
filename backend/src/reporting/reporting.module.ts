@@ -3,11 +3,12 @@ import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
 import { ContentGenerationService } from './content-generation.service';
 import { IntegrationModule } from '../integrations/integration.module';
+import { AuthModule } from '../auth';
 import { SeoDashboardEmbedController } from './seo-dashboard-embed.controller';
 import { SeoDashboardEmbedService } from './seo-dashboard-embed.service';
 
 @Module({
-  imports: [IntegrationModule],
+  imports: [IntegrationModule, AuthModule],
   controllers: [DashboardController, SeoDashboardEmbedController],
   providers: [DashboardService, ContentGenerationService, SeoDashboardEmbedService],
   exports: [DashboardService, ContentGenerationService],
