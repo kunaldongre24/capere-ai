@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { CryptoService } from '../shared/crypto';
@@ -12,14 +12,18 @@ import {
   type GhlTokenSet,
 } from './ghl/ghl.adapter';
 import type { ConnectGhlDto } from './integration.dto';
+import { GhlSeoDashboardProvisioningService } from './ghl/ghl-seo-dashboard-provisioning.service';
 
 @Injectable()
 export class IntegrationService {
+  private readonly logger = new Logger(IntegrationService.name);
+
   constructor(
     private readonly database: DatabaseService,
     private readonly crypto: CryptoService,
     private readonly outbox: OutboxService,
     private readonly ghl: GhlAdapter,
+    private readonly seoDashboardProvisioning?: GhlSeoDashboardProvisioningService,
   ) {}
 
   list(organizationId: string) {
@@ -214,7 +218,7 @@ export class IntegrationService {
       );
     }
 
-    return this.database.transaction(async (trx) => {
+    const connected = await this.database.transaction(async (trx) => {
       // Serialize connection/reconnection for this organization/provider/location
       // before selecting the stable integration id used as encryption AAD.
       await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`go_high_level:${locationId}`}, 0))`.execute(
@@ -329,6 +333,22 @@ export class IntegrationService {
       });
       return integration;
     });
+    try {
+      await this.seoDashboardProvisioning?.provision({
+        organizationId,
+        internalLocationId: connected.ghl_location_id!,
+        ghlLocationId: location.id,
+        locationName: location.name,
+        credentials,
+      });
+    } catch (error) {
+      // Dashboard provisioning is recoverable and must never invalidate an
+      // otherwise successful GHL installation.
+      this.logger.warn(
+        `SEO dashboard provisioning failed for ${location.id}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return connected;
   }
 
   async disconnect(organizationId: string, integrationId: string) {

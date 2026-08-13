@@ -36,6 +36,13 @@ export interface GhlLocation {
   readonly social?: Record<string, string>;
 }
 
+export interface GhlCustomValue {
+  readonly id: string;
+  readonly name: string;
+  readonly fieldKey?: string;
+  readonly value: string;
+}
+
 type GhlLocationSearchResponse = {
   readonly locations?: readonly GhlLocation[];
   readonly meta?: { readonly total?: number; readonly nextPageUrl?: string | null };
@@ -234,6 +241,58 @@ export class GhlAdapter {
     };
   }
 
+  async getCustomValues(
+    credentials: GhlCredentials,
+    locationId: string,
+  ): Promise<GhlCustomValue[]> {
+    const response = await this.getJson<{
+      customValues?: Array<{
+        id?: string;
+        name?: string;
+        fieldKey?: string;
+        field_key?: string;
+        value?: string;
+      }>;
+    }>(credentials, `/locations/${encodeURIComponent(locationId)}/customValues`);
+    return (response.customValues ?? [])
+      .filter((item): item is typeof item & { id: string; name: string } =>
+        Boolean(item.id && item.name),
+      )
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        fieldKey: item.fieldKey ?? item.field_key,
+        value: item.value ?? '',
+      }));
+  }
+
+  async createCustomValue(
+    credentials: GhlCredentials,
+    locationId: string,
+    name: string,
+    value: string,
+  ): Promise<void> {
+    await this.postJson(
+      credentials,
+      `/locations/${encodeURIComponent(locationId)}/customValues`,
+      { name, value },
+    );
+  }
+
+  async updateCustomValue(
+    credentials: GhlCredentials,
+    locationId: string,
+    customValueId: string,
+    name: string,
+    value: string,
+  ): Promise<void> {
+    await this.putJson(
+      credentials,
+      `/locations/${encodeURIComponent(locationId)}/customValues/${encodeURIComponent(customValueId)}`,
+      { name, value },
+    );
+  }
+
   async getJson<T>(
     credentials: GhlCredentials,
     path: string,
@@ -285,11 +344,24 @@ export class GhlAdapter {
   }
 
   async postJson<T>(credentials: GhlCredentials, path: string, body: unknown): Promise<T> {
+    return this.writeJson<T>('POST', credentials, path, body);
+  }
+
+  async putJson<T>(credentials: GhlCredentials, path: string, body: unknown): Promise<T> {
+    return this.writeJson<T>('PUT', credentials, path, body);
+  }
+
+  private async writeJson<T>(
+    method: 'POST' | 'PUT',
+    credentials: GhlCredentials,
+    path: string,
+    body: unknown,
+  ): Promise<T> {
     const url = `${this.config.ghl.baseUrl.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
     let response: Response;
     try {
       response = await fetch(url, {
-        method: 'POST',
+        method,
         headers: {
           authorization: `Bearer ${credentials.accessToken}`,
           accept: 'application/json',

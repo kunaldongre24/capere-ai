@@ -6,6 +6,7 @@ import { AppException, ErrorCode } from '../../shared/http';
 import { getApps, initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { sql } from 'kysely';
+import { GhlSeoDashboardProvisioningService } from './ghl-seo-dashboard-provisioning.service';
 
 type GhlUserContext = {
   userId?: string;
@@ -63,6 +64,7 @@ export class GhlSsoService {
   constructor(
     private readonly database: DatabaseService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly seoDashboardProvisioning: GhlSeoDashboardProvisioningService,
   ) {}
 
   async exchange(encryptedData: string) {
@@ -115,6 +117,14 @@ export class GhlSsoService {
         'This GoHighLevel sub-account is not connected to Capere',
       );
     }
+
+    void this.seoDashboardProvisioning
+      .provisionConnectedLocation(location.organization_id, locationId)
+      .catch((error) =>
+        this.logger.warn(
+          `SEO dashboard provisioning retry failed for ${locationId}: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      );
 
     if (this.config.identity.provider === 'firebase') {
       return this.exchangeFirebase(location.organization_id, email, context.userName, ghlUserId, context.role);

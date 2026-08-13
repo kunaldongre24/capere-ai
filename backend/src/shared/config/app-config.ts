@@ -301,6 +301,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
         'workflows.readonly',
         'locations/customFields.readonly',
         'locations/customValues.readonly',
+        'locations/customValues.write',
         'locations/tags.readonly',
         'locations/tags.write',
         'reputation/review.readonly',
