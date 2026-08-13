@@ -24,12 +24,13 @@ export class MigrationRunner {
   constructor(
     private readonly connectionString: string,
     private readonly migrationsDir: string = DEFAULT_DIR,
+    private readonly disableSsl: boolean = false,
   ) {}
 
   private async withClient<T>(fn: (client: Client) => Promise<T>): Promise<T> {
     const client = new Client({
       connectionString: this.connectionString,
-      ssl: resolveSsl(this.connectionString),
+      ssl: this.disableSsl ? false : resolveSsl(this.connectionString),
     });
     await client.connect();
     try {
