@@ -173,7 +173,12 @@ export class GhlAdapter {
       name: location.name,
       timezone: location.timezone,
       website: location.website,
-      googlePlacesId: location.social?.googlePlacesId,
+      googlePlacesId:
+        location.social?.googlePlacesId ??
+        location.social?.google_place_id ??
+        location.social?.googlePlaceID ??
+        (location as { googlePlacesId?: string }).googlePlacesId ??
+        (location as { google_place_id?: string }).google_place_id,
       email: location.email,
       phone: location.phone,
       address: location.address,

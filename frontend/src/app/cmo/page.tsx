@@ -159,7 +159,7 @@ export default async function CmoPage({
   }));
   let content: React.ReactNode;
   if (view === 'integrations')
-    content = <IntegrationConnectPanel embedded gbpConnected={Boolean(businessProfile?.profileConnectionConfirmed)} />;
+    content = <IntegrationConnectPanel embedded gbpConnected={Boolean(businessProfile?.connected)} />;
   else if (view === 'business')
     content = <div className="cmo-layout"><BusinessProfileDashboard profile={businessProfile} /></div>;
   else if (view === 'insights')
@@ -402,7 +402,7 @@ export default async function CmoPage({
             <strong>Data connections</strong>
             <span>Services used to prepare your insights</span>
           </div>
-          <IntegrationConnectPanel embedded compact gbpConnected={Boolean(businessProfile?.profileConnectionConfirmed)} />
+          <IntegrationConnectPanel embedded compact gbpConnected={Boolean(businessProfile?.connected)} />
         </div>
         <div className="grid grid-4">
           <Card
