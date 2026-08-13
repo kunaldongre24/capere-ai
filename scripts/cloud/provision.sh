@@ -70,14 +70,14 @@ gcloud sql databases describe capere --instance "$SQL_INSTANCE" --project "$PROJ
   gcloud sql databases create capere --instance "$SQL_INSTANCE" --project "$PROJECT_ID"
 
 gcloud tasks queues describe "$TASK_QUEUE" --location "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1 || \
-  gcloud tasks queues create "$TASK_QUEUE" --location "$REGION" --max-concurrent-dispatches 10 --max-dispatches-per-second 10 --max-attempts 5 --min-backoff 5s --max-backoff 1h --max-doublings 8 --project "$PROJECT_ID"
+  gcloud tasks queues create "$TASK_QUEUE" --location "$REGION" --max-concurrent-dispatches 10 --max-dispatches-per-second 10 --max-attempts 5 --min-backoff 5s --max-backoff 3600s --max-doublings 8 --project "$PROJECT_ID"
 gcloud tasks queues update "$TASK_QUEUE" \
   --location "$REGION" \
   --max-concurrent-dispatches 10 \
   --max-dispatches-per-second 10 \
   --max-attempts 5 \
   --min-backoff 5s \
-  --max-backoff 1h \
+  --max-backoff 3600s \
   --max-doublings 8 \
   --project "$PROJECT_ID" >/dev/null
 
