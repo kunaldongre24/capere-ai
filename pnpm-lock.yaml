@@ -159,6 +159,9 @@ importers:
       caniuse-lite:
         specifier: 1.0.30001806
         version: 1.0.30001806
+      client-only:
+        specifier: 0.0.1
+        version: 0.0.1
       firebase-admin:
         specifier: ^14.2.0
         version: 14.2.0
