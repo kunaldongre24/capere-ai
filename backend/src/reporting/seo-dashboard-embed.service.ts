@@ -5,6 +5,9 @@ import { APP_CONFIG, type AppConfig } from '../shared/config';
 import { DatabaseService } from '../shared/database';
 import { AppException, ErrorCode } from '../shared/http';
 import { DashboardService } from './dashboard.service';
+import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { sql } from 'kysely';
 
 const PURPOSE = 'seo_dashboard';
 const AUDIENCE = 'capere-seo-dashboard';
@@ -47,7 +50,33 @@ export class SeoDashboardEmbedService {
     const resolved = await this.apiKeys.verifyForPurpose(rawKey, PURPOSE);
     const token = await new SignJWT({ org:resolved.organizationId, loc:resolved.ghlLocationId, kid:resolved.apiKeyId })
       .setProtectedHeader({ alg:'HS256' }).setAudience(AUDIENCE).setIssuer('capere').setIssuedAt().setExpirationTime('1h').sign(this.signingKey);
-    return { token, expiresInSeconds:3600 };
+    if (this.config.identity.provider !== 'firebase') return { token, expiresInSeconds:3600 };
+
+    // The dashboard key is already bound to one active organization and GHL
+    // location. Give that location a stable, non-human Firebase identity so
+    // the existing full SEO application can be reused without a login screen.
+    const uid = resolved.ghlLocationId!;
+    const email = `seo-dashboard-${uid}@embedded.capereai.com`;
+    if (!getApps().length)
+      initializeApp({ credential: applicationDefault(), projectId: this.config.identity.firebaseProjectId });
+    const auth = getAuth();
+    try {
+      await auth.getUser(uid);
+      await auth.updateUser(uid, { email, displayName: 'Search Visibility Dashboard', disabled: false });
+    } catch (error) {
+      if ((error as { code?: string })?.code !== 'auth/user-not-found') throw error;
+      await auth.createUser({ uid, email, displayName: 'Search Visibility Dashboard', emailVerified: true });
+    }
+    await this.database.transaction(async (trx) => {
+      await sql`INSERT INTO auth.users (id, email) VALUES (${uid}::uuid, ${email}) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`.execute(trx);
+      await trx.insertInto('capere.users').values({ id:uid, email, full_name:'Search Visibility Dashboard', avatar_url:null, last_seen_at:new Date() }).onConflict((conflict)=>conflict.column('id').doUpdateSet({ email, full_name:'Search Visibility Dashboard', last_seen_at:new Date(), updated_at:new Date() })).execute();
+      await trx.insertInto('capere.organization_members').values({ organization_id:resolved.organizationId, user_id:uid, role:'seo_specialist', invited_by:null }).onConflict((conflict)=>conflict.columns(['organization_id','user_id']).doUpdateSet({ role:'seo_specialist' })).execute();
+    });
+    const customToken = await auth.createCustomToken(uid, {
+      ghl_location_id: resolved.ghlLocationId,
+      dashboard_embed: true,
+    });
+    return { token, customToken, organizationId:resolved.organizationId, expiresInSeconds:3600 };
   }
 
   async summary(token: string) {
