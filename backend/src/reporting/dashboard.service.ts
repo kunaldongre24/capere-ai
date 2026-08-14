@@ -320,6 +320,38 @@ export class DashboardService {
     }
   }
 
+  private async ensureCompetitorSchedule(
+    organizationId: string,
+    projectId: string,
+  ): Promise<void> {
+    const row = await this.database.db
+      .selectFrom('capere.competitors')
+      .select('id')
+      .where('organization_id', '=', organizationId)
+      .where('seo_project_id', '=', projectId)
+      .executeTakeFirst();
+    if (!row) return;
+    await this.database.db
+      .insertInto('capere.scheduled_jobs')
+      .values({
+        organization_id: organizationId,
+        job_type: 'dataforseo-competitor-refresh',
+        name: `dataforseo-competitors:${projectId}`,
+        schedule: 'daily',
+        enabled: true,
+        next_run_at: new Date(Date.now() + 60_000),
+        payload: JSON.stringify({ projectId }),
+      })
+      .onConflict((conflict) =>
+        conflict.columns(['organization_id', 'name']).doUpdateSet({
+          enabled: true,
+          schedule: 'daily',
+          payload: JSON.stringify({ projectId }),
+        }),
+      )
+      .execute();
+  }
+
   async seoCommandCenter(organizationId: string) {
     let metrics = await this.query(organizationId, 'seo', 30);
     if (metrics.length === 0) {
@@ -382,6 +414,7 @@ export class DashboardService {
     const technicalAudit = value(technicalAuditResult, undefined);
     const auditHistory = value(auditHistoryResult, []);
     const project = value(projectResult, undefined);
+    if (project) await this.ensureCompetitorSchedule(organizationId, project.id);
     const keywords = value(keywordsResult, []);
     const searchQueryRows = value(searchQueryRowsResult, []);
     const searchQueryMap = new Map<string, { query: string; clicks: number; impressions: number; weightedPosition: number; latestDate: string }>();
