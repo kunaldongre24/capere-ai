@@ -7,6 +7,6 @@ export async function POST(request:NextRequest){
   const result=await upstream.json().catch(()=>({})) as {data?:{token?:string;expiresInSeconds?:number};error?:unknown};
   if(!upstream.ok||!result.data?.token)return NextResponse.json({error:result.error??{message:'Dashboard access could not be verified'}},{status:upstream.status||401});
   const response=NextResponse.json({data:{authenticated:true}});
-  response.cookies.set('capere-seo-dashboard',result.data.token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:process.env.NODE_ENV==='production'?'none':'lax',path:'/embed/seo-dashboard',maxAge:result.data.expiresInSeconds??3600});
+  response.cookies.set('capere-seo-dashboard',result.data.token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:process.env.NODE_ENV==='production'?'none':'lax',path:'/',maxAge:result.data.expiresInSeconds??3600});
   return response;
 }
