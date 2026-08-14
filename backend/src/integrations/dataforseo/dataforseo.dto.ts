@@ -20,3 +20,5 @@ export class CreateCompetitorDto {
   @IsString() @Length(1, 120) domain!: string;
   @IsString() @Length(1, 200) name!: string;
 }
+
+export class UpdateCompetitorDto extends CreateCompetitorDto {}

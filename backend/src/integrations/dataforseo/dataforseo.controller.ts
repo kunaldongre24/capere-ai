@@ -1,7 +1,7 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentOrg, Public, Roles } from '../../auth';
-import { CreateCompetitorDto, CreateSeoProjectDto, RunSeoAuditDto, SetSeoWebsiteDto } from './dataforseo.dto';
+import { CreateCompetitorDto, CreateSeoProjectDto, RunSeoAuditDto, SetSeoWebsiteDto, UpdateCompetitorDto } from './dataforseo.dto';
 import { DataForSeoService } from './dataforseo.service';
 import { GhlSeoDashboardProvisioningService } from '../ghl/ghl-seo-dashboard-provisioning.service';
 
@@ -41,6 +41,11 @@ export class DataForSeoController {
   @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
   listCompetitors(@CurrentOrg() org: string, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.listCompetitors(org, id);
+  }
+  @Patch('projects/:id/competitors/:competitorId')
+  @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
+  updateCompetitor(@CurrentOrg() org: string, @Param('id', ParseUUIDPipe) id: string, @Param('competitorId', ParseUUIDPipe) competitorId: string, @Body() dto: UpdateCompetitorDto) {
+    return this.service.updateCompetitor(org, id, competitorId, dto);
   }
   @Post('projects/:id/competitors/refresh')
   @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')

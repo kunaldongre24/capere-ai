@@ -6,7 +6,7 @@ import { DatabaseService } from '../../shared/database';
 import { EventType, OutboxService } from '../../shared/events';
 import { AppException, ErrorCode } from '../../shared/http';
 import { DataForSeoAdapter } from './dataforseo.adapter';
-import type { CreateCompetitorDto, CreateSeoProjectDto, RunSeoAuditDto } from './dataforseo.dto';
+import type { CreateCompetitorDto, CreateSeoProjectDto, RunSeoAuditDto, UpdateCompetitorDto } from './dataforseo.dto';
 
 @Injectable()
 export class DataForSeoService {
@@ -81,12 +81,21 @@ export class DataForSeoService {
       .executeTakeFirst();
   }
 
+  private competitorDomain(value: string): string {
+    try {
+      const domain = new URL(value.trim().includes('://') ? value.trim() : `https://${value.trim()}`)
+        .hostname.toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
+      if (!domain || domain.includes(' ')) throw new Error('invalid domain');
+      return domain;
+    } catch {
+      throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'Enter a valid competitor website');
+    }
+  }
+
   async addCompetitor(organizationId: string, projectId: string, dto: CreateCompetitorDto) {
     const project = await this.database.db.selectFrom('capere.seo_projects').select(['id','site_url']).where('organization_id','=',organizationId).where('id','=',projectId).executeTakeFirst();
     if (!project) throw AppException.notFound(ErrorCode.NOT_FOUND, 'SEO project not found');
-    let domain = dto.domain.trim().toLowerCase();
-    try { domain = new URL(domain.includes('://') ? domain : `https://${domain}`).hostname.toLowerCase().replace(/^www\./,'').replace(/\.$/,''); } catch { throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'Enter a valid competitor website'); }
-    if (!domain || domain.includes(' ')) throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'Enter a valid competitor website');
+    const domain = this.competitorDomain(dto.domain);
     const existing = await this.database.db.selectFrom('capere.competitors').select('id').where('organization_id','=',organizationId).where('seo_project_id','=',projectId).where('domain','=',domain).executeTakeFirst();
     const count = await this.database.db.selectFrom('capere.competitors').select((eb) => eb.fn.countAll<number>().as('count')).where('organization_id','=',organizationId).where('seo_project_id','=',projectId).executeTakeFirstOrThrow();
     if (!existing && Number(count.count) >= 4) throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'You can compare up to 4 businesses per website');
@@ -96,6 +105,32 @@ export class DataForSeoService {
     const eligibleAt = recent ? new Date(new Date(recent.updated_at).getTime() + 24 * 3_600_000) : new Date(Date.now() + 2 * 60_000);
     await this.database.db.insertInto('capere.scheduled_jobs').values({ organization_id: organizationId, job_type: 'dataforseo-competitor-refresh', name: `dataforseo-competitors:${projectId}`, schedule: 'daily', enabled: true, next_run_at: eligibleAt, payload: JSON.stringify({ projectId }) }).onConflict((oc) => oc.columns(['organization_id','name']).doUpdateSet({ enabled: true, schedule:'daily', next_run_at:eligibleAt, payload: JSON.stringify({ projectId }) })).execute();
     return this.database.db.selectFrom('capere.competitors').selectAll().where('organization_id','=',organizationId).where('id','=',competitor.id).executeTakeFirstOrThrow();
+  }
+
+  async updateCompetitor(organizationId: string, projectId: string, competitorId: string, dto: UpdateCompetitorDto) {
+    const [project, competitor] = await Promise.all([
+      this.database.db.selectFrom('capere.seo_projects').select(['id', 'site_url']).where('organization_id', '=', organizationId).where('id', '=', projectId).executeTakeFirst(),
+      this.database.db.selectFrom('capere.competitors').select(['id', 'domain']).where('organization_id', '=', organizationId).where('seo_project_id', '=', projectId).where('id', '=', competitorId).executeTakeFirst(),
+    ]);
+    if (!project) throw AppException.notFound(ErrorCode.NOT_FOUND, 'SEO project not found');
+    if (!competitor) throw AppException.notFound(ErrorCode.NOT_FOUND, 'Competitor not found');
+    const domain = this.competitorDomain(dto.domain);
+    const duplicate = await this.database.db.selectFrom('capere.competitors').select('id').where('organization_id', '=', organizationId).where('seo_project_id', '=', projectId).where('domain', '=', domain).where('id', '!=', competitorId).executeTakeFirst();
+    if (duplicate) throw AppException.conflict(ErrorCode.CONFLICT, 'This competitor website is already in the comparison');
+    const domainChanged = domain !== competitor.domain;
+    const updated = await this.database.db.updateTable('capere.competitors').set({
+      name: dto.name.trim(),
+      domain,
+      ...(domainChanged ? { metrics: JSON.stringify({ status: 'configured', message: 'Comparison data will appear after the next refresh.' }), last_checked_at: null } : {}),
+      updated_at: new Date(),
+    }).where('organization_id', '=', organizationId).where('seo_project_id', '=', projectId).where('id', '=', competitorId).returningAll().executeTakeFirstOrThrow();
+    if (domainChanged) {
+      const target = new URL(project.site_url).hostname.toLowerCase().replace(/^www\./, '');
+      const recent = await this.latestCompetitorRefresh(organizationId, projectId, target);
+      const eligibleAt = recent ? new Date(new Date(recent.updated_at).getTime() + 24 * 3_600_000) : new Date(Date.now() + 2 * 60_000);
+      await this.database.db.insertInto('capere.scheduled_jobs').values({ organization_id: organizationId, job_type: 'dataforseo-competitor-refresh', name: `dataforseo-competitors:${projectId}`, schedule: 'daily', enabled: true, next_run_at: eligibleAt, payload: JSON.stringify({ projectId }) }).onConflict((oc) => oc.columns(['organization_id', 'name']).doUpdateSet({ enabled: true, schedule: 'daily', next_run_at: eligibleAt, payload: JSON.stringify({ projectId }) })).execute();
+    }
+    return updated;
   }
 
   async refreshCompetitors(organizationId: string, projectId: string) {
