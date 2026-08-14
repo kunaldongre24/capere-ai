@@ -27,7 +27,7 @@ steps:
       - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/backend:$BUILD_ID
       - --region=${_REGION}
       - --service-account=capere-api@$PROJECT_ID.iam.gserviceaccount.com
-      - --clear-cloudsql-instances
+      - --set-cloudsql-instances=
       - --set-env-vars=NODE_ENV=production,DATABASE_SSL_MODE=verify
       - --set-secrets=DATABASE_URL=CAPERE_DATABASE_URL:latest,DATABASE_SSL_CA_BASE64=CAPERE_DATABASE_SSL_CA_BASE64:latest
       - --command=pnpm
@@ -51,7 +51,7 @@ steps:
       - --region=${_REGION}
       - --platform=managed
       - --service-account=capere-api@$PROJECT_ID.iam.gserviceaccount.com
-      - --clear-cloudsql-instances
+      - --set-cloudsql-instances=
       - --port=8080
       - --min-instances=0
       - --max-instances=3
