@@ -4,7 +4,6 @@ set -euo pipefail
 PROJECT_ID="${GOOGLE_CLOUD_PROJECT:-capere-ai-786a0}"
 REGION="${GOOGLE_CLOUD_REGION:-asia-south1}"
 API_SERVICE="${CAPERE_API_SERVICE:-capere-backend}"
-SQL_INSTANCE="${CAPERE_SQL_INSTANCE:-capere-postgres}"
 TASK_QUEUE="${CAPERE_TASK_QUEUE:-capere-integration-jobs}"
 RAG_BUCKET="${CAPERE_RAG_BUCKET:-${PROJECT_ID}-rag-sources}"
 ENABLE_SCHEDULERS="${CAPERE_ENABLE_SCHEDULERS:-false}"
@@ -14,7 +13,6 @@ MANAGED_TASK_AUDIENCE="${CAPERE_MANAGED_TASK_AUDIENCE:-$MANAGED_TASK_URL}"
 gcloud services enable \
   artifactregistry.googleapis.com \
   run.googleapis.com \
-  sqladmin.googleapis.com \
   cloudtasks.googleapis.com \
   cloudscheduler.googleapis.com \
   secretmanager.googleapis.com \
@@ -52,23 +50,6 @@ for account in capere-api capere-tasks; do
     gcloud iam service-accounts create "$account" --display-name "$account" --project "$PROJECT_ID"
 done
 
-gcloud sql instances describe "$SQL_INSTANCE" --project "$PROJECT_ID" >/dev/null 2>&1 || \
-  gcloud sql instances create "$SQL_INSTANCE" \
-    --database-version POSTGRES_17 \
-    --edition ENTERPRISE \
-    --region "$REGION" \
-    --tier db-custom-2-7680 \
-    --storage-type SSD \
-    --storage-size 20 \
-    --storage-auto-increase \
-    --availability-type regional \
-    --backup-start-time 20:00 \
-    --enable-point-in-time-recovery \
-    --project "$PROJECT_ID"
-
-gcloud sql databases describe capere --instance "$SQL_INSTANCE" --project "$PROJECT_ID" >/dev/null 2>&1 || \
-  gcloud sql databases create capere --instance "$SQL_INSTANCE" --project "$PROJECT_ID"
-
 gcloud tasks queues describe "$TASK_QUEUE" --location "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1 || \
   gcloud tasks queues create "$TASK_QUEUE" --location "$REGION" --max-concurrent-dispatches 10 --max-dispatches-per-second 10 --max-attempts 5 --min-backoff 5s --max-backoff 3600s --max-doublings 8 --project "$PROJECT_ID"
 gcloud tasks queues update "$TASK_QUEUE" \
@@ -86,7 +67,6 @@ gcloud storage buckets describe "gs://$RAG_BUCKET" --project "$PROJECT_ID" >/dev
 
 gcloud storage buckets update "gs://$RAG_BUCKET" --versioning --project "$PROJECT_ID"
 
-gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/cloudsql.client --condition=None >/dev/null
 gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/cloudtasks.enqueuer --condition=None >/dev/null
 gcloud storage buckets add-iam-policy-binding "gs://$RAG_BUCKET" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/storage.objectAdmin >/dev/null
 gcloud storage buckets add-iam-policy-binding "gs://$RAG_BUCKET" --member "serviceAccount:capere-api@$PROJECT_ID.iam.gserviceaccount.com" --role roles/storage.legacyBucketReader >/dev/null
@@ -117,5 +97,5 @@ else
 fi
 
 echo "Provisioning complete for project $PROJECT_ID in $REGION."
-echo "Cloud SQL connection: $PROJECT_ID:$REGION:$SQL_INSTANCE"
+echo "Database: external Supabase PostgreSQL configured through Secret Manager"
 echo "RAG bucket: gs://$RAG_BUCKET"

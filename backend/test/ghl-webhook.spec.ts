@@ -31,9 +31,11 @@ function signature(body: Buffer): string {
 describe('GHL Marketplace webhooks', () => {
   let fixture: Fixture;
   let service: GhlWebhookService;
+  let locationId: string;
 
   beforeEach(async () => {
     fixture = await seedTwoOrganizations();
+    locationId = `location-webhook-${fixture.orgAId}`;
     const db = database();
     service = new GhlWebhookService(
       {
@@ -47,7 +49,7 @@ describe('GHL Marketplace webhooks', () => {
       .values({
         organization_id: fixture.orgAId,
         provider: 'go_high_level',
-        account_id: 'location-webhook',
+        account_id: locationId,
         status: 'connected',
       })
       .execute();
@@ -60,8 +62,8 @@ describe('GHL Marketplace webhooks', () => {
     const body = Buffer.from(
       JSON.stringify({
         type: 'ContactCreate',
-        eventId: 'event-1',
-        locationId: 'location-webhook',
+        eventId: `event-${fixture.orgAId}`,
+        locationId,
         contactId: 'contact-1',
         source: 'Website',
       }),
@@ -81,7 +83,7 @@ describe('GHL Marketplace webhooks', () => {
       .executeTakeFirstOrThrow();
     expect(event.payload).toMatchObject({
       ghlContactId: 'contact-1',
-      ghlLocationId: 'location-webhook',
+      ghlLocationId: locationId,
       source: 'Website',
     });
     const eventCount = await serviceDb()
@@ -98,7 +100,7 @@ describe('GHL Marketplace webhooks', () => {
       JSON.stringify({
         type: 'ContactCreate',
         id: 'contact-official-shape',
-        locationId: 'location-webhook',
+        locationId,
         source: 'Website',
       }),
     );
@@ -106,7 +108,7 @@ describe('GHL Marketplace webhooks', () => {
       JSON.stringify({
         type: 'ContactUpdate',
         id: 'contact-official-shape',
-        locationId: 'location-webhook',
+        locationId,
       }),
     );
 
@@ -151,7 +153,7 @@ describe('GHL Marketplace webhooks', () => {
         type: 'OpportunityCreate',
         id: 'opportunity-1',
         contactId: 'contact-1',
-        locationId: 'location-webhook',
+        locationId,
         monetaryValue: 1000,
         pipelineId: 'pipeline-1',
         pipelineStageId: 'stage-1',
@@ -175,7 +177,7 @@ describe('GHL Marketplace webhooks', () => {
       payload: {
         ghlOpportunityId: 'opportunity-1',
         ghlContactId: 'contact-1',
-        ghlLocationId: 'location-webhook',
+        ghlLocationId: locationId,
         monetaryValue: 1000,
         pipelineId: 'pipeline-1',
         pipelineStageId: 'stage-1',
@@ -194,7 +196,7 @@ describe('GHL Marketplace webhooks', () => {
         type: webhookType,
         id: `opportunity-${webhookType}`,
         contactId: 'contact-1',
-        locationId: 'location-webhook',
+        locationId,
         monetaryValue: 2000,
         pipelineId: 'pipeline-1',
         pipelineStageId: 'stage-2',
@@ -222,7 +224,7 @@ describe('GHL Marketplace webhooks', () => {
       .executeTakeFirstOrThrow();
     expect(event.payload).toMatchObject({
       ghlOpportunityId: `opportunity-${webhookType}`,
-      ghlLocationId: 'location-webhook',
+      ghlLocationId: locationId,
       ghlContactId: 'contact-1',
       monetaryValue: 2000,
       pipelineStageId: 'stage-2',
@@ -236,7 +238,7 @@ describe('GHL Marketplace webhooks', () => {
     const body = Buffer.from(
       JSON.stringify({
         type: webhookType,
-        locationId: 'location-webhook',
+        locationId,
         appointment: {
           id: `appointment-${webhookType}`,
           contactId: 'contact-1',
@@ -279,7 +281,7 @@ describe('GHL Marketplace webhooks', () => {
       aggregate_type: 'ghl_appointment_reference',
       payload: {
         ghlAppointmentId: `appointment-${webhookType}`,
-        ghlLocationId: 'location-webhook',
+        ghlLocationId: locationId,
         ghlContactId: 'contact-1',
         ghlCalendarId: 'calendar-1',
         appointmentStatus: 'confirmed',
@@ -290,10 +292,10 @@ describe('GHL Marketplace webhooks', () => {
 
   it('rejects a tampered payload and records no domain event', async () => {
     const signed = Buffer.from(
-      JSON.stringify({ type: 'ContactCreate', locationId: 'location-webhook', contactId: 'one' }),
+      JSON.stringify({ type: 'ContactCreate', locationId, contactId: 'one' }),
     );
     const tampered = Buffer.from(
-      JSON.stringify({ type: 'ContactCreate', locationId: 'location-webhook', contactId: 'two' }),
+      JSON.stringify({ type: 'ContactCreate', locationId, contactId: 'two' }),
     );
     await expect(
       service.receive(tampered, { 'x-wh-signature': signature(signed) }),

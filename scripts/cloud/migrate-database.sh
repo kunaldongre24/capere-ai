@@ -2,8 +2,8 @@
 set -euo pipefail
 
 : "${SOURCE_DATABASE_URL:?Set SOURCE_DATABASE_URL to the current PostgreSQL connection string}"
-: "${TARGET_DATABASE_URL:?Set TARGET_DATABASE_URL to the Cloud SQL PostgreSQL connection string}"
-: "${SERVICE_ROLE_PASSWORD:?Set SERVICE_ROLE_PASSWORD to the generated Cloud SQL application password}"
+: "${TARGET_DATABASE_URL:?Set TARGET_DATABASE_URL to the target Supabase PostgreSQL connection string}"
+: "${SERVICE_ROLE_PASSWORD:?Set SERVICE_ROLE_PASSWORD to the Supabase application role password}"
 
 if [[ ! "$SERVICE_ROLE_PASSWORD" =~ ^[A-Za-z0-9_-]{32,128}$ ]]; then
   echo "SERVICE_ROLE_PASSWORD must contain 32-128 URL-safe characters" >&2

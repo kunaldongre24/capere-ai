@@ -1,0 +1,10 @@
+api.capereai.com {
+	encode zstd gzip
+
+	reverse_proxy https://capere-backend-re4cfunobq-el.a.run.app {
+		header_up Host {upstream_hostport}
+		transport http {
+			tls_server_name capere-backend-re4cfunobq-el.a.run.app
+		}
+	}
+}
