@@ -43,6 +43,23 @@ describe('GHL SEO website provisioning', () => {
     await expect(subject.websiteStatus(fixture.orgAId)).resolves.toMatchObject({status:'missing',currentWebsite:null,ghlWebsite:null});
   });
 
+  it('keeps manual website setup visible when GHL credentials cannot be refreshed',async()=>{
+    const tokens={credentials:vi.fn().mockRejectedValue(new Error('refresh unavailable'))} as unknown as GhlTokenService;
+    const subject=new GhlSeoDashboardProvisioningService(
+      database(),
+      {} as ApiKeyService,
+      {} as GhlAdapter,
+      tokens,
+      {createProject:vi.fn()} as unknown as DataForSeoService,
+      {webUrl:'https://app.capereai.com'} as AppConfig,
+    );
+    await expect(subject.websiteStatus(fixture.orgAId)).resolves.toMatchObject({
+      status:'missing',
+      currentWebsite:null,
+      ghlWebsite:null,
+    });
+  });
+
   it('requires confirmation when GHL reports a different domain',async()=>{
     await serviceDb().insertInto('capere.seo_projects').values({organization_id:fixture.orgAId,name:'Current site',site_url:'https://current.example',target_location_code:2356,language_code:'en',enabled:true}).execute();
     const subject=service({id:`location-${fixture.orgAId}`,name:'Client Firm',website:'https://new.example/',country:'India'});

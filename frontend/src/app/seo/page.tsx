@@ -310,6 +310,7 @@ export default async function SeoPage({
   if (view === 'technical')
     content = (
       <div className="grid">
+        <SeoWebsiteStatus value={websiteStatus} />
         <div className="grid grid-3">
           <Card
             title="Website health"

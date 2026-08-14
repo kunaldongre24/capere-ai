@@ -137,7 +137,22 @@ export class GhlSeoDashboardProvisioningService {
 
   async websiteStatus(organizationId:string) {
     let active = await this.activeProject(organizationId);
-    const connected = await this.connectedLocation(organizationId);
+    let connected: Awaited<ReturnType<GhlSeoDashboardProvisioningService['connectedLocation']>> = null;
+    try {
+      connected = await this.connectedLocation(organizationId);
+    } catch (error) {
+      this.logger.warn(
+        `GHL website lookup could not start for ${organizationId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return {
+        status: active ? 'connected' as const : 'missing' as const,
+        currentWebsite: active?.site_url ?? null,
+        ghlWebsite: null,
+        message: active
+          ? 'Your website review remains active. GoHighLevel website details are temporarily unavailable.'
+          : 'We could not read the website from GoHighLevel. Add it here to begin your first review.',
+      };
+    }
     if (!connected) return { status:active?'connected':'unavailable', currentWebsite:active?.site_url??null, ghlWebsite:null, message:active?'Your website review is active.':'GoHighLevel is not connected.' };
     try {
       const location = await this.ghl.getLocation(connected.credentials, connected.ghlLocationId);
@@ -151,7 +166,10 @@ export class GhlSeoDashboardProvisioningService {
       if (ghlWebsite && this.websiteIdentity(active.site_url) !== this.websiteIdentity(ghlWebsite)) return { status:'change_pending' as const, currentWebsite:active.site_url, ghlWebsite, message:'GoHighLevel has a different website. Confirm before starting reports for the new site.' };
       return { status:'connected' as const, currentWebsite:active.site_url, ghlWebsite, message:'Your website is connected and monitored automatically.' };
     } catch (error) {
-      return { status:active?'connected' as const:'unavailable' as const, currentWebsite:active?.site_url??null, ghlWebsite:null, message:active?'Your website review remains active. GoHighLevel website details are temporarily unavailable.':'Website details are temporarily unavailable.' };
+      this.logger.warn(
+        `GHL website lookup failed for ${organizationId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return { status:active?'connected' as const:'missing' as const, currentWebsite:active?.site_url??null, ghlWebsite:null, message:active?'Your website review remains active. GoHighLevel website details are temporarily unavailable.':'We could not read the website from GoHighLevel. Add it here to begin your first review.' };
     }
   }
 

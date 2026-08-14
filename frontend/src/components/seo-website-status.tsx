@@ -22,7 +22,12 @@ export function SeoWebsiteStatus({ value }: { value: WebsiteStatus | null }) {
   const [message, setMessage] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
-  if (!value) return null;
+  const resolved: WebsiteStatus = value ?? {
+    status: 'missing',
+    currentWebsite: null,
+    ghlWebsite: null,
+    message: 'Add your website to begin your first review.',
+  };
 
   async function save(siteUrl: string, confirmChange: boolean) {
     setBusy(true); setMessage(null);
@@ -42,26 +47,26 @@ export function SeoWebsiteStatus({ value }: { value: WebsiteStatus | null }) {
     } finally { setBusy(false); }
   }
 
-  if (value.status === 'missing') return (
+  if (resolved.status === 'missing' || (resolved.status === 'unavailable' && !resolved.currentWebsite)) return (
     <section className="seo-website-status attention">
-      <div className="seo-website-copy"><span>Website setup</span><strong>Add your business website</strong><p>Enter the website customers use to find your business. Capere will prepare the first review automatically.</p></div>
+      <div className="seo-website-copy"><span>Website setup</span><strong>Add your business website</strong><p>{resolved.message || 'Enter the website customers use to find your business. Capere will prepare the first review automatically.'}</p></div>
       <div className="seo-website-form"><input className="form-input" value={website} onChange={(event)=>setWebsite(event.target.value)} placeholder="yourbusiness.com" aria-label="Business website"/><button className="btn" disabled={busy||!website.trim()} onClick={()=>save(website,false)}>{busy?'Saving…':'Add website'}</button></div>
       {message&&<p className="seo-website-message">{message}</p>}
     </section>
   );
 
-  if (value.status === 'change_pending' && value.ghlWebsite && !dismissed) return (
+  if (resolved.status === 'change_pending' && resolved.ghlWebsite && !dismissed) return (
     <section className="seo-website-status warning">
-      <div className="seo-website-copy"><span>Website update found</span><strong>{domain(value.ghlWebsite)}</strong><p>GoHighLevel now lists this website. Confirm it to begin new reports while keeping your previous audit history.</p><small>Current website: {domain(value.currentWebsite)}</small></div>
-      <div className="seo-website-actions"><button className="btn secondary" disabled={busy} onClick={()=>setDismissed(true)}>Keep current</button><button className="btn" disabled={busy} onClick={()=>save(value.ghlWebsite!,true)}>{busy?'Updating…':'Use this website'}</button></div>
+      <div className="seo-website-copy"><span>Website update found</span><strong>{domain(resolved.ghlWebsite)}</strong><p>GoHighLevel now lists this website. Confirm it to begin new reports while keeping your previous audit history.</p><small>Current website: {domain(resolved.currentWebsite)}</small></div>
+      <div className="seo-website-actions"><button className="btn secondary" disabled={busy} onClick={()=>setDismissed(true)}>Keep current</button><button className="btn" disabled={busy} onClick={()=>save(resolved.ghlWebsite!,true)}>{busy?'Updating…':'Use this website'}</button></div>
       {message&&<p className="seo-website-message">{message}</p>}
     </section>
   );
 
   return (
-    <section className={`seo-website-status ${value.status}`}>
-      <div className="seo-website-copy"><span>{value.status==='unavailable'?'Website status':'Website being reviewed'}</span><strong>{domain(value.currentWebsite)||'Waiting for website details'}</strong><p>{value.message}</p></div>
-      {value.status==='connected'&&<div className="seo-website-badge">Connected</div>}
+    <section className={`seo-website-status ${resolved.status}`}>
+      <div className="seo-website-copy"><span>{resolved.status==='unavailable'?'Website status':'Website being reviewed'}</span><strong>{domain(resolved.currentWebsite)||'Waiting for website details'}</strong><p>{resolved.message}</p></div>
+      {resolved.status==='connected'&&<div className="seo-website-badge">Connected</div>}
     </section>
   );
 }
