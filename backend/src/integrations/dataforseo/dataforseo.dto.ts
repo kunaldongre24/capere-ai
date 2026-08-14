@@ -1,4 +1,4 @@
-import { IsInt, IsString, IsUrl, Length, Max, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, IsUrl, Length, Max, Min } from 'class-validator';
 
 export class CreateSeoProjectDto {
   @IsString() @Length(1, 200) name!: string;
@@ -9,6 +9,11 @@ export class CreateSeoProjectDto {
 
 export class RunSeoAuditDto {
   @IsInt() @Min(1) @Max(20) maxCrawlPages = 20;
+}
+
+export class SetSeoWebsiteDto {
+  @IsUrl({ require_protocol: true }) siteUrl!: string;
+  @IsOptional() @IsBoolean() confirmChange = false;
 }
 
 export class CreateCompetitorDto {

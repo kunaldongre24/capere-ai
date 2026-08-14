@@ -2,6 +2,7 @@ import { EmbeddedModule } from '@/components/embedded-module';
 import { CompetitorControls } from '@/components/competitor-controls';
 import { CompetitorPending } from '@/components/competitor-pending';
 import { KeywordRefresh } from '@/components/keyword-refresh';
+import { SeoWebsiteStatus } from '@/components/seo-website-status';
 import { capereFetch, Envelope } from '@/lib/api';
 
 const sections = [
@@ -256,6 +257,7 @@ export default async function SeoPage({
   };
   let competitors = (Array.isArray(d.competitors) ? d.competitors : []) as Competitor[];
   const project = (d.project && typeof d.project === 'object' ? d.project : null) as { id:string; name:string; site_url:string } | null;
+  const websiteStatus = (d.websiteStatus && typeof d.websiteStatus === 'object' ? d.websiteStatus : null) as null | {status:'connected'|'provisioning'|'missing'|'change_pending'|'unavailable';currentWebsite:string|null;ghlWebsite:string|null;message:string};
   if (project?.id) {
     try {
       const savedCompetitors = await capereFetch<Envelope<Competitor[]>>(`/api/v1/integrations/data-for-seo/projects/${project.id}/competitors`);
@@ -652,6 +654,7 @@ export default async function SeoPage({
     const clickSeries = [...byDate.entries()];
     content = (
       <div className="grid">
+        <SeoWebsiteStatus value={websiteStatus} />
         <div className="grid grid-4">
           <Card
             title="Organic clicks"

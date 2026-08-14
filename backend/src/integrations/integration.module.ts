@@ -67,6 +67,7 @@ import { GhlSeoDashboardProvisioningService } from './ghl/ghl-seo-dashboard-prov
     GhlTokenService,
     GhlReputationService,
     GhlBusinessSnapshotService,
+    GhlSeoDashboardProvisioningService,
     GoogleAdapter,
     GoogleService,
     GoogleTokenService,

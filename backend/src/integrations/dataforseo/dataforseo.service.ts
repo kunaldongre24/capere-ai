@@ -218,45 +218,19 @@ export class DataForSeoService {
       throw AppException.badRequest(ErrorCode.BAD_REQUEST, 'Website is not reachable; verify the URL and try again');
     }
     await this.ensurePlatformIntegration(organizationId);
-    const project = await this.database.db
-      .insertInto('capere.seo_projects')
-      .values({
-        organization_id: organizationId,
-        name: dto.name,
-        site_url: url.toString().replace(/\/$/, ''),
-        target_location_code: dto.targetLocationCode,
-        language_code: dto.languageCode,
-        enabled: true,
-      })
-      .onConflict((c) =>
-        c.columns(['organization_id', 'site_url']).doUpdateSet({
-          name: dto.name,
-          target_location_code: dto.targetLocationCode,
-          language_code: dto.languageCode,
-          enabled: true,
-        }),
-      )
-      .returningAll()
-      .executeTakeFirstOrThrow();
-    await this.database.db
-      .insertInto('capere.scheduled_jobs')
-      .values({
-        organization_id: organizationId,
-        job_type: 'dataforseo-audit-submit',
-        name: `dataforseo-audit:${project.id}`,
-        schedule: 'weekly',
-        enabled: true,
-        next_run_at: new Date(),
-        payload: JSON.stringify({ projectId: project.id, maxCrawlPages: 20 }),
-      })
-      .onConflict((c) => c.columns(['organization_id', 'name']).doUpdateSet({
-        enabled: true,
-        next_run_at: new Date(),
-        payload: JSON.stringify({ projectId: project.id, maxCrawlPages: 20 }),
-      }))
-      .execute();
-    await this.database.db.insertInto('capere.scheduled_jobs').values({ organization_id:organizationId,job_type:'dataforseo-keyword-refresh',name:`dataforseo-keywords:${project.id}`,schedule:'weekly',enabled:true,next_run_at:new Date(Date.now()+15*60_000),payload:JSON.stringify({projectId:project.id,force:true}) }).onConflict((oc)=>oc.columns(['organization_id','name']).doUpdateSet({enabled:true,payload:JSON.stringify({projectId:project.id,force:true})})).execute();
-    return project;
+    const normalizedUrl = url.toString().replace(/\/$/, '');
+    return this.database.transaction(async (trx) => {
+      await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`seo-project:${organizationId}:${normalizedUrl}`}, 0))`.execute(trx);
+      const project = await trx
+        .insertInto('capere.seo_projects')
+        .values({ organization_id: organizationId, name: dto.name, site_url: normalizedUrl, target_location_code: dto.targetLocationCode, language_code: dto.languageCode, enabled: true })
+        .onConflict((c) => c.columns(['organization_id', 'site_url']).doUpdateSet({ name: dto.name, target_location_code: dto.targetLocationCode, language_code: dto.languageCode, enabled: true }))
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await trx.insertInto('capere.scheduled_jobs').values({ organization_id: organizationId, job_type: 'dataforseo-audit-submit', name: `dataforseo-audit:${project.id}`, schedule: 'weekly', enabled: true, next_run_at: new Date(), payload: JSON.stringify({ projectId: project.id, maxCrawlPages: 20 }) }).onConflict((c) => c.columns(['organization_id', 'name']).doUpdateSet({ enabled: true, next_run_at: new Date(), payload: JSON.stringify({ projectId: project.id, maxCrawlPages: 20 }) })).execute();
+      await trx.insertInto('capere.scheduled_jobs').values({ organization_id:organizationId,job_type:'dataforseo-keyword-refresh',name:`dataforseo-keywords:${project.id}`,schedule:'weekly',enabled:true,next_run_at:new Date(Date.now()+15*60_000),payload:JSON.stringify({projectId:project.id,force:true}) }).onConflict((oc)=>oc.columns(['organization_id','name']).doUpdateSet({enabled:true,payload:JSON.stringify({projectId:project.id,force:true})})).execute();
+      return project;
+    });
   }
 
   async submitAudit(organizationId: string, projectId: string, dto: RunSeoAuditDto) {

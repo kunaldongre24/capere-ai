@@ -339,6 +339,8 @@ export class IntegrationService {
         internalLocationId: connected.ghl_location_id!,
         ghlLocationId: location.id,
         locationName: location.name,
+        website: location.website ?? null,
+        country: location.country ?? null,
         credentials,
       });
     } catch (error) {

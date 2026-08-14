@@ -1,18 +1,27 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentOrg, Public, Roles } from '../../auth';
-import { CreateCompetitorDto, CreateSeoProjectDto, RunSeoAuditDto } from './dataforseo.dto';
+import { CreateCompetitorDto, CreateSeoProjectDto, RunSeoAuditDto, SetSeoWebsiteDto } from './dataforseo.dto';
 import { DataForSeoService } from './dataforseo.service';
+import { GhlSeoDashboardProvisioningService } from '../ghl/ghl-seo-dashboard-provisioning.service';
 
 @ApiTags('data-for-seo')
 @ApiBearerAuth('supabase-jwt')
 @Controller({ path: 'integrations/data-for-seo', version: '1' })
 export class DataForSeoController {
-  constructor(private readonly service: DataForSeoService) {}
+  constructor(
+    private readonly service: DataForSeoService,
+    private readonly seoProvisioning: GhlSeoDashboardProvisioningService,
+  ) {}
   @Post('projects')
   @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
   project(@CurrentOrg() org: string, @Body() dto: CreateSeoProjectDto) {
     return this.service.createProject(org, dto);
+  }
+  @Post('website')
+  @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')
+  website(@CurrentOrg() org: string, @Body() dto: SetSeoWebsiteDto) {
+    return this.seoProvisioning.setWebsite(org, dto.siteUrl, dto.confirmChange);
   }
   @Post('projects/:id/audits')
   @Roles('owner', 'office_manager', 'marketing_manager', 'seo_specialist', 'capere_admin')

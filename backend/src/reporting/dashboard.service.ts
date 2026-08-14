@@ -5,6 +5,7 @@ import { GhlAdapter } from '../integrations/ghl/ghl.adapter';
 import { GhlTokenService } from '../integrations/ghl/ghl-token.service';
 import { GhlReputationService } from '../integrations/ghl/ghl-reputation.service';
 import { GhlBusinessSnapshotService } from '../integrations/ghl/ghl-business-snapshot.service';
+import { GhlSeoDashboardProvisioningService } from '../integrations/ghl/ghl-seo-dashboard-provisioning.service';
 
 const DASHBOARDS: readonly DashboardKind[] = [
   'executive',
@@ -17,7 +18,7 @@ const DASHBOARDS: readonly DashboardKind[] = [
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly database: DatabaseService, @Optional() private readonly ghl?: GhlAdapter, @Optional() private readonly ghlTokens?: GhlTokenService, @Optional() private readonly ghlReputation?: GhlReputationService, @Optional() private readonly ghlBusiness?: GhlBusinessSnapshotService) {}
+  constructor(private readonly database: DatabaseService, @Optional() private readonly ghl?: GhlAdapter, @Optional() private readonly ghlTokens?: GhlTokenService, @Optional() private readonly ghlReputation?: GhlReputationService, @Optional() private readonly ghlBusiness?: GhlBusinessSnapshotService, @Optional() private readonly seoProvisioning?: GhlSeoDashboardProvisioningService) {}
 
   kinds(): readonly DashboardKind[] {
     return DASHBOARDS;
@@ -325,6 +326,9 @@ export class DashboardService {
       await this.refresh(organizationId);
       metrics = await this.query(organizationId, 'seo', 30);
     }
+    const websiteStatus = this.seoProvisioning
+      ? await this.seoProvisioning.websiteStatus(organizationId).catch(() => null)
+      : null;
     const queryStart = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10);
     const [recommendationsResult, technicalAuditResult, auditHistoryResult, projectResult, keywordsResult, searchQueryRowsResult, competitorsResult, integrationsResult, localProfileResult] = await Promise.allSettled([
       this.database.db
@@ -425,6 +429,7 @@ export class DashboardService {
       competitors,
       integrations,
       localProfile,
+      websiteStatus,
       evidenceComplete: metrics.length > 0 || Boolean(technicalAudit),
     };
   }
