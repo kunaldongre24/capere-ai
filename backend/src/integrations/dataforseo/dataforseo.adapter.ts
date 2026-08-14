@@ -3,7 +3,14 @@ import { APP_CONFIG, type AppConfig } from '../../shared/config';
 import { providerFetch, readJson } from '../provider-adapter';
 
 interface DataForSeoResponse<T> {
-  tasks?: Array<{ id?: string; status_code: number; result?: T[]; cost?: number }>;
+  tasks?: Array<{
+    id?: string;
+    status_code: number;
+    status_message?: string;
+    result_count?: number;
+    result?: T[];
+    cost?: number;
+  }>;
 }
 
 @Injectable()

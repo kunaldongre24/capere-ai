@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { APP_CONFIG, type AppConfig } from '../../shared/config';
 import { sql } from 'kysely';
 import { DatabaseService } from '../../shared/database';
@@ -10,6 +10,8 @@ import type { CreateCompetitorDto, CreateSeoProjectDto, RunSeoAuditDto } from '.
 
 @Injectable()
 export class DataForSeoService {
+  private readonly logger = new Logger(DataForSeoService.name);
+
   constructor(
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly database: DatabaseService,
@@ -108,15 +110,33 @@ export class DataForSeoService {
     const request = { targets: [target, ...competitors.map((c) => c.domain)], location_code: project.target_location_code, language_code: project.language_code };
     const fingerprint = createHash('sha256').update(JSON.stringify(request)).digest('hex');
     const integration = await this.ensurePlatformIntegration(organizationId);
-    const response = await this.adapter.postTask<Record<string, unknown>>('dataforseo_labs/google/bulk_traffic_estimation/live', request);
-    const task = response.tasks?.[0];
-    const result = task?.result?.[0] as {
+    let response = await this.adapter.postTask<Record<string, unknown>>('dataforseo_labs/google/bulk_traffic_estimation/live', request);
+    let task = response.tasks?.[0];
+    let result = task?.result?.[0] as {
       items?: Array<{
         target?: string;
         metrics?: Record<string, { etv?: number; count?: number } | null>;
       }>;
     } | undefined;
-    if (!result?.items) throw AppException.serviceUnavailable(ErrorCode.INTEGRATION_ERROR, 'DataForSEO did not return competitor data');
+    if (!result?.items) {
+      this.logger.warn(
+        `DataForSEO returned an incomplete competitor result for project ${projectId} ` +
+        `(status ${task?.status_code ?? 'unknown'}: ${task?.status_message ?? 'no task message'}); retrying once`,
+      );
+      response = await this.adapter.postTask<Record<string, unknown>>('dataforseo_labs/google/bulk_traffic_estimation/live', request);
+      task = response.tasks?.[0];
+      result = task?.result?.[0] as typeof result;
+    }
+    if (!result?.items) {
+      this.logger.warn(
+        `DataForSEO competitor retry failed for project ${projectId} ` +
+        `(status ${task?.status_code ?? 'unknown'}: ${task?.status_message ?? 'no task message'})`,
+      );
+      throw AppException.serviceUnavailable(
+        ErrorCode.INTEGRATION_ERROR,
+        'The comparison provider returned an incomplete result. Please try again in a moment.',
+      );
+    }
     const byTarget = new Map(result.items.map((item) => [String(item.target ?? '').replace(/^www\./, ''), item]));
     const targetItem = byTarget.get(target);
     const measurableDomains = result.items.filter((item) => Number(item.metrics?.organic?.count ?? 0) > 0).map((item) => String(item.target ?? '').replace(/^www\./, '')).slice(0, 3);
