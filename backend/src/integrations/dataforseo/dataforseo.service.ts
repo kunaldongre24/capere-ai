@@ -118,6 +118,13 @@ export class DataForSeoService {
         metrics?: Record<string, { etv?: number; count?: number } | null>;
       }>;
     } | undefined;
+    const providerStatus = `${task?.status_code ?? ''} ${task?.status_message ?? ''}`.toLowerCase();
+    if (task?.status_code === 40207 || providerStatus.includes('ip is not whitelisted')) {
+      throw AppException.serviceUnavailable(
+        ErrorCode.INTEGRATION_ERROR,
+        'DataForSEO is blocking the production server because its IP address is not whitelisted. Add the production egress IP in DataForSEO API Access, then try the comparison again.',
+      );
+    }
     if (!result?.items) {
       this.logger.warn(
         `DataForSEO returned an incomplete competitor result for project ${projectId} ` +
@@ -126,6 +133,13 @@ export class DataForSeoService {
       response = await this.adapter.postTask<Record<string, unknown>>('dataforseo_labs/google/bulk_traffic_estimation/live', request);
       task = response.tasks?.[0];
       result = task?.result?.[0] as typeof result;
+      const retryStatus = `${task?.status_code ?? ''} ${task?.status_message ?? ''}`.toLowerCase();
+      if (task?.status_code === 40207 || retryStatus.includes('ip is not whitelisted')) {
+        throw AppException.serviceUnavailable(
+          ErrorCode.INTEGRATION_ERROR,
+          'DataForSEO is blocking the production server because its IP address is not whitelisted. Add the production egress IP in DataForSEO API Access, then try the comparison again.',
+        );
+      }
     }
     if (!result?.items) {
       this.logger.warn(
