@@ -15,6 +15,10 @@ export interface AppConfig {
   readonly logLevel: Env['LOG_LEVEL'];
   readonly corsOrigins: readonly string[];
   readonly webUrl: string;
+  readonly marketing: {
+    readonly organizationId: string;
+    readonly bookingUrl: string;
+  };
   readonly managedTaskSecret: string;
   readonly identity: {
     readonly provider: 'supabase' | 'firebase';
@@ -233,6 +237,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     logLevel: env.LOG_LEVEL,
     corsOrigins: Object.freeze(env.CORS_ORIGINS),
     webUrl: env.APP_WEB_URL.replace(/\/$/, ''),
+    marketing: Object.freeze({
+      organizationId: env.MARKETING_ORGANIZATION_ID,
+      bookingUrl: env.MARKETING_BOOKING_URL,
+    }),
     managedTaskSecret: env.MANAGED_TASK_SECRET,
     identity: Object.freeze({ provider: env.AUTH_PROVIDER, firebaseProjectId: env.FIREBASE_PROJECT_ID }),
     managedTasks: Object.freeze({

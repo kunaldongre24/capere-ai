@@ -19,7 +19,7 @@ const csv = z
   .string()
   .transform((value) =>
     value
-      .split(',')
+      .split(/[|,]/)
       .map((part) => part.trim())
       .filter((part) => part.length > 0),
   )
@@ -52,6 +52,8 @@ export const envSchema = z
       .default('info'),
     CORS_ORIGINS: csv.default('http://localhost:8080'),
     APP_WEB_URL: z.string().url().default('https://app.capereai.com'),
+    MARKETING_ORGANIZATION_ID: z.string().uuid().optional().or(z.literal('')).default(''),
+    MARKETING_BOOKING_URL: z.string().url().optional().or(z.literal('')).default(''),
     MANAGED_TASK_SECRET: z.string().optional().default(''),
     AUTH_PROVIDER: z.enum(['supabase', 'firebase']).default('supabase'),
     FIREBASE_PROJECT_ID: z.string().optional().default(''),

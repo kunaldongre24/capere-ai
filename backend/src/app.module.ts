@@ -11,6 +11,7 @@ import { IntelligenceModule } from './intelligence';
 import { IntegrationModule } from './integrations/integration.module';
 import { JobsModule } from './jobs';
 import { LlmModule } from './llm';
+import { MarketingChatModule } from './marketing-chat/marketing-chat.module';
 import { OrganizationModule } from './organizations/organization.module';
 import { RagModule } from './rag/rag.module';
 import { RecommendationModule } from './recommendations';
@@ -69,6 +70,7 @@ import { GlobalExceptionFilter, ResponseInterceptor } from './shared/http';
     IntelligenceModule,
     InsightsModule,
     ChatModule,
+    MarketingChatModule,
     JobsModule,
     HealthModule,
   ],
