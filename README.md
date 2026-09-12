@@ -11,26 +11,6 @@ Capere does not try to replace GoHighLevel. It makes it significantly smarter.
 
 ---
 
-## Status: Phase 6 implemented
-
-Capere uses stateless API and worker processes. Each request loads organization context and optional durable conversation history from PostgreSQL, retrieves knowledge from Supabase pgvector, executes bounded read-only tools, routes model calls through OpenRouter, and records token cost against the organization. Qdrant remains an optional adapter selected with `VECTOR_STORE_PROVIDER=qdrant`.
-
-Verified against hosted Supabase PostgreSQL:
-
-- **348 unit/integration tests passing**, plus **10 HTTP e2e tests**, including **175 row-level-security tests** asserting that no organization can read, update, delete or insert into another's data across every tenant table.
-- Focused coverage includes API-key lifecycle, owner-only human sessions, organization-scoped machine sessions, concurrent transcript appends, fail-closed reflection, outbox claim recovery, and scheduler retries/dead-lettering.
-- Optional sessions and tool transcripts are persisted, model parameters are propagated, and costs are recorded in exact integer micro-USD.
-
-The backend foundations for Phases 1-6 are implemented: approval-first GHL task/workflow automation, model-routed content drafts, persisted daily briefs, scheduled execution, autonomous recommendation proposals, and job monitoring. Full GHL custom-menu deployment, Looker Studio assets, production UI configuration, and staging/live-provider validation remain deferred.
-
-Open WebUI is deployed as a single-tenant interface: each instance uses one
-organization-bound Capere API key. Deploy a separate isolated instance per CPA
-firm until a verified Open WebUI user-identity bridge is introduced. Chat
-attachments are not ingested automatically; knowledge documents use the
-authenticated `/api/v1/rag/documents` endpoint.
-
----
-
 ## Architecture
 
 ```
